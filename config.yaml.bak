@@ -1,0 +1,57 @@
+# Calra Sim Config Parameters
+carla:
+  server: '127.0.0.1'
+  port: 2000
+  autopilot: False
+  timeout: 200
+  no_rendering_mode: True
+  world: 'Town10HD_Opt'
+  vehicle_tag: 'charger_2020'
+  #vehicle_tag: 'wrangler_rubicon'
+  steering_dead_zone: 0.1   # 0.001 for fanatec
+
+sim:
+  default_control: 'G920_Racing_Wheel'
+  windows:
+    front_res: [2560,1440]
+    mirror_res: [640,480]
+    dashcam_res: [550,350]
+
+  # Note: different vehicles have different mirror locations, add new locations below
+  mirror_location:
+    charger_2020:
+      left: [0.5, -1, 1.0]
+      right:  [0.5, 1, 1.0]
+    wrangler_rubicon:
+      left: [0.5, -1, 1.5]
+      right:  [0.5, 1, 1.5]   
+
+  controls:
+    G920_Racing_Wheel:
+      steering_wheel: 0
+      throttle: 1               
+      brake: 3
+      reverse: 11
+      handbrake: 4
+      accel: 2
+      gears:
+        first: 12
+        second: 13
+        third: 14
+        fourth: 15
+        fifth: 16
+        sixth: 17
+
+    xboxone:
+      steering_wheel: 0
+      throttle: 5
+      brake: 2
+      reverse: 0
+      handbrake: 1
+      accel: 4
+    fanatec:
+      steering_wheel: 0
+      throttle: 1
+      brake: 4
+      reverse: 1
+      handbrake: 2 
