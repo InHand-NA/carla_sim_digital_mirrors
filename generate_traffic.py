@@ -71,9 +71,9 @@ def main():
     argparser.add_argument(
         '-n', '--number-of-vehicles',
         metavar='N',
-        default=30,
+        default=50,
         type=int,
-        help='Number of vehicles (default: 30)')
+        help='Number of vehicles (default: 50)')
     argparser.add_argument(
         '-w', '--number-of-walkers',
         metavar='W',
@@ -255,17 +255,28 @@ def main():
                 vehicles_list.append(response.actor_id)
 
         # Set automatic vehicle lights update if specified
-        if args.car_lights_on:
-            all_vehicle_actors = world.get_actors(vehicles_list)
-            for actor in all_vehicle_actors:
-                traffic_manager.update_vehicle_lights(actor, True)
+        all_vehicle_actors = world.get_actors(vehicles_list)
+        for actor in all_vehicle_actors:
+            actor.set_autopilot(True, traffic_manager.get_port())
 
+            # Smoother behavior
+            traffic_manager.ignore_lights_percentage(actor, 0.0)
+            traffic_manager.ignore_signs_percentage(actor, 0.0)
+            traffic_manager.distance_to_leading_vehicle(actor, 10.0)  # Reduce unnecessary braking
+            traffic_manager.vehicle_percentage_speed_difference(actor, 10.0)  # Drive at 90% of limit
+
+            # Optional: Avoid phantom braking (if applicable)
+            # traffic_manager.ignore_vehicles_percentage(actor, 20.0)  # Be less cautious
+
+            # Enable lights if requested
+            if args.car_lights_on:
+                traffic_manager.update_vehicle_lights(actor, True)
         # -------------
         # Spawn Walkers
         # -------------
         # some settings
-        percentagePedestriansRunning = 0.0      # how many pedestrians will run
-        percentagePedestriansCrossing = 0.0     # how many pedestrians will walk through the road
+        percentagePedestriansRunning = 50.0      # how many pedestrians will run
+        percentagePedestriansCrossing = 50.0     # how many pedestrians will walk through the road
         if args.seedw:
             world.set_pedestrians_seed(args.seedw)
             random.seed(args.seedw)
