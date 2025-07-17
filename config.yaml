@@ -1,6 +1,6 @@
 # Calra Sim Config Parameters
 carla:
-  server: '127.0.0.1'
+  server: '192.168.1.211'
   port: 2000
   autopilot: False
   timeout: 200
@@ -11,10 +11,11 @@ carla:
   steering_dead_zone: 0.1   # 0.001 for fanatec
 
 sim:
-  default_control: 'xboxone'
+  default_control: 'G920_Racing_Wheel'
   windows:
-    front_res: [1024,768]
+    front_res: [2560,1440]
     mirror_res: [640,480]
+    dashcam_res: [550,350]
 
   # Note: different vehicles have different mirror locations, add new locations below
   mirror_location:
@@ -26,18 +27,21 @@ sim:
       right:  [0.5, 1, 1.5]   
 
   controls:
-    G29_Racing_Wheel:
-        steering_wheel: 0
-        throttle: 2
-        brake: 3
-        reverse: 5
-        handbrake: 4
+    G920_Racing_Wheel:
+      steering_wheel: 0
+      throttle: 1               
+      brake: 3
+      reverse: 15
+      handbrake: 4
+      accel: 14
+
     xboxone:
       steering_wheel: 0
       throttle: 5
-      brake: 4
+      brake: 2
       reverse: 0
       handbrake: 1
+      accel: 4
     fanatec:
       steering_wheel: 0
       throttle: 1

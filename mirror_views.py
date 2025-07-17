@@ -5,7 +5,7 @@ from ruamel.yaml import YAML
 from pathlib import Path
 from screeninfo import get_monitors
 
-smd = SharedMemoryDict(name='tokens', size=10000000)
+smd = SharedMemoryDict(name='tokens', size=50000000)
 
 # Read Config File
 configfile=Path("config.yaml")
