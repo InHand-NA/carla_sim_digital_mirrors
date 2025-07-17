@@ -49,7 +49,8 @@ class RenderObject(object):
 run_num = 0
 frame_count = 0
 frame_skip = 2
-base_dir = "/home/inhand/carla/outputs"
+base_dir = Path.cwd().parent / "carla_outputs"
+base_dir.mkdir(exist_ok=True)
 
 existing = [d for d in os.listdir(base_dir) if d.startswith("run") and d[3:].isdigit()]
 run_ids = [int(d[3:]) for d in existing]
