@@ -181,7 +181,7 @@ def main():
             if not settings.synchronous_mode:
                 synchronous_master = True
                 settings.synchronous_mode = True
-                settings.fixed_delta_seconds = 0.05
+                settings.fixed_delta_seconds = 0.05 # Fixme： 应当从sim_main.py中获取
             else:
                 synchronous_master = False
         else:
@@ -193,10 +193,12 @@ def main():
             settings.no_rendering_mode = True
         world.apply_settings(settings)
 
+        # 获取车辆蓝图列表
         blueprints = get_actor_blueprints(world, args.filterv, args.generationv)
         blueprintsWalkers = get_actor_blueprints(world, args.filterw, args.generationw)
 
         if args.safe:
+            # 安全模式下，只生成4轮车，并过滤掉以下车辆
             blueprints = [x for x in blueprints if int(x.get_attribute('number_of_wheels')) == 4]
             blueprints = [x for x in blueprints if not x.id.endswith('microlino')]
             blueprints = [x for x in blueprints if not x.id.endswith('carlacola')]
@@ -208,6 +210,7 @@ def main():
 
         blueprints = sorted(blueprints, key=lambda bp: bp.id)
 
+        # 获取生成点列表
         spawn_points = world.get_map().get_spawn_points()
         number_of_spawn_points = len(spawn_points)
 
@@ -264,7 +267,7 @@ def main():
         # Spawn Walkers
         # -------------
         # some settings
-        percentagePedestriansRunning = 0.0      # how many pedestrians will run
+        percentagePedestriansRunning = 0.0      # how many pedestrians will run, 0.0表示所有行人都walking
         percentagePedestriansCrossing = 0.0     # how many pedestrians will walk through the road
         if args.seedw:
             world.set_pedestrians_seed(args.seedw)

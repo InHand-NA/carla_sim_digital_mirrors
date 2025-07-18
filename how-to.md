@@ -112,6 +112,7 @@ sudo docker run --rm -it \
       carla:0.9.15_snd /bin/bash ./CarlaUE4.sh -windowed -ResX=1024 -ResY=786 -carla-rpc-port=2000 -quality-level=High
 ```
 
+==Note: Now, we don't get any error message about the sound system, but we still hear nothing from the simulator.==
 
 ## 2. 解决`xdg-user-dir: not found`问题
 

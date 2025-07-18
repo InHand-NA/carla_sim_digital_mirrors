@@ -10,5 +10,27 @@ sudo docker run --rm -it \
      --group-add audio \
      -v /etc/asound.conf:/etc/asound.conf:ro \
      --name carla_server \
-      mycarla:0.9.15_snd_xdg /bin/bash ./CarlaUE4.sh -windowed -ResX=1024 -ResY=786 -carla-rpc-port=2000 -quality-level=High
+      mycarla:0.9.15_snd_xdg /bin/bash ./CarlaUE4.sh -windowed -ResX=1024 -ResY=786 -carla-rpc-port=2000 -quality-level=Epic
+```
+
+
+```
+sudo docker run --rm -it \
+     --privileged --gpus all --net=host  \
+     -e DISPLAY=$DISPLAY \
+     --device /dev/snd:/dev/snd  \
+     --group-add audio \
+     -v /etc/asound.conf:/etc/asound.conf:ro \
+     -v /home/zyb/Downloads/AdditionalMaps_0.9.15.tar.gz:/tmp/AdditionalMaps_0.9.15.tar.gz \
+     --name carla_server \
+      mycarla:0.9.15_snd_xdg /bin/bash ./CarlaUE4.sh -RenderOffScreen -carla-rpc-port=2000 -quality-level=Epic
+```
+
+
+```
+VENV_PATH=.venv
+python3.10 -m venv $VENV_PATH
+$VENV_PATH/bin/pip install -U pip setuptools
+$VENV_PATH/bin/pip install poetry
+source $VENV_PATH/bin/activate
 ```

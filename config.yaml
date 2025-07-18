@@ -2,21 +2,48 @@
 carla:
   server: '127.0.0.1'
   port: 2000
-  autopilot: False
-  timeout: 200
+  autopilot: True
+  timeout: 20
   no_rendering_mode: True
-  world: 'Town10HD_Opt'
-  vehicle_tag: 'charger_2020'
+  world: 'Town06'
+  vehicle_tag: 'firetruck'
   #vehicle_tag: 'wrangler_rubicon'
   steering_dead_zone: 0.1   # 0.001 for fanatec
+  fps: 20
 
 sim:
   default_control: 'xboxone'
   windows:
-    front_res: [1024,768]
+    front_res: [1800,900]
     mirror_res: [640,480]
+    dashcam_res: [640,360]
+
+  # Make sure the time is similar to real time for a better experience of driving
+  real_time_mode: True
+  god_view_mode: False
+  # Note: different vehicles have different mirror locations, add new locations below
+  god_view_location: 
+    charger_2020: [-4.0, 0.0, 3.0]
+    wrangler_rubicon: [-4.0, 0.0, 3.0]
+    firetruck: [-10.0, 0.0, 8.0]
+  god_view_rotation:  # Pitch, Yaw, Roll
+    charger_2020: [-10.0, 0.0, 0.0]
+    wrangler_rubicon: [-10.0, 0.0, 0.0]
+    firetruck: [-10.0, 0.0, 0.0]
 
   # Note: different vehicles have different mirror locations, add new locations below
+  # Vehicle Half Size:
+  # firetruck: x=4.234021, y=1.445544, z=1.913706
+  front_view_location: 
+    charger_2020: [0.3, -0.38, 1.2]
+    wrangler_rubicon: [0.3, -0.38, 1.2]
+    firetruck: [3.1, -0.75, 2.8]
+
+  dashcam_location:
+    charger_2020: [0.5, 0.0, 1.2]
+    wrangler_rubicon: [0.5, 0.0, 1.2]
+    firetruck: [4.0, 0.0, 2.8]
+
   mirror_location:
     charger_2020:
       left: [0.5, -1, 1.0]
@@ -24,20 +51,25 @@ sim:
     wrangler_rubicon:
       left: [0.5, -1, 1.5]
       right:  [0.5, 1, 1.5]   
+    firetruck:
+      left: [3.2, -1.45, 2.5]
+      right:  [3.2, 1.45, 2.5]
+
 
   controls:
-    G29_Racing_Wheel:
-        steering_wheel: 0
-        throttle: 2
-        brake: 3
-        reverse: 5
-        handbrake: 4
-    xboxone:
+    G920_Racing_Wheel:
       steering_wheel: 0
-      throttle: 5
-      brake: 4
-      reverse: 0
-      handbrake: 1
+      throttle: 1               
+      brake: 3
+      reverse: 15
+      handbrake: 4
+
+    xboxone:
+      steering_wheel: 0 # Left stick
+      throttle: 5 # Right Trigger , Axis 5
+      brake: 2 # Left Trigger , Axis 2
+      reverse: 0 # Button: A
+      handbrake: 1 # Button: B
     fanatec:
       steering_wheel: 0
       throttle: 1
