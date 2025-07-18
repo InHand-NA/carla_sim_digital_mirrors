@@ -21,9 +21,8 @@ sudo docker run --rm -it \
      --device /dev/snd:/dev/snd  \
      --group-add audio \
      -v /etc/asound.conf:/etc/asound.conf:ro \
-     -v /home/zyb/Downloads/AdditionalMaps_0.9.15.tar.gz:/tmp/AdditionalMaps_0.9.15.tar.gz \
      --name carla_server \
-      mycarla:0.9.15_snd_xdg /bin/bash ./CarlaUE4.sh -RenderOffScreen -carla-rpc-port=2000 -quality-level=Epic
+      mycarla:0.9.15_maps /bin/bash ./CarlaUE4.sh -RenderOffScreen -carla-rpc-port=2000 -quality-level=Epic
 ```
 
 

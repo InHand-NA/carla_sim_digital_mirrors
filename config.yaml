@@ -9,7 +9,7 @@ carla:
   vehicle_tag: 'firetruck'
   #vehicle_tag: 'wrangler_rubicon'
   steering_dead_zone: 0.1   # 0.001 for fanatec
-  fps: 20
+  fps: 10
 
 sim:
   default_control: 'xboxone'
@@ -39,10 +39,11 @@ sim:
     wrangler_rubicon: [0.3, -0.38, 1.2]
     firetruck: [3.1, -0.75, 2.8]
 
+  dashcam_fov: 60
   dashcam_location:
     charger_2020: [0.5, 0.0, 1.2]
     wrangler_rubicon: [0.5, 0.0, 1.2]
-    firetruck: [4.0, 0.0, 2.8]
+    firetruck: [3.8, 0.0, 2.8]
 
   mirror_location:
     charger_2020:

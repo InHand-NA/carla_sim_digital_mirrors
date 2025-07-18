@@ -43,7 +43,7 @@ while True:
         img = dc_no_img
     if 'frame_count' in smd.keys():
         frame_count = smd['frame_count']
-        seconds = frame_count / 20
+        seconds = smd['seconds']
     else:
         frame_count = -1
         seconds = -1

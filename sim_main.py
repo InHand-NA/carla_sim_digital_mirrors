@@ -279,10 +279,11 @@ car_blueprint.set_attribute('image_size_x', str(front_window_size[0]))
 car_blueprint.set_attribute('image_size_y', str(front_window_size[1]))
 car_blueprint.set_attribute('fov', '140')
 
+dashcam_fov = _config['sim']['dashcam_fov']
 dashcam_blueprint = world.get_blueprint_library().find('sensor.camera.rgb')
 dashcam_blueprint.set_attribute('image_size_x', str(dashcam_window_size[0]))
 dashcam_blueprint.set_attribute('image_size_y', str(dashcam_window_size[1]))
-dashcam_blueprint.set_attribute('fov', '60')
+dashcam_blueprint.set_attribute('fov', str(dashcam_fov))
 
 # Set the time in seconds between sensor captures
 #blueprint.set_attribute('sensor_tick', '1')
@@ -362,6 +363,8 @@ while not crashed:
     # Advance the simulation time
     fid = world.tick()
     smd['frame_count'] = fid
+    seconds = fid / carla_fps
+    smd['seconds'] = seconds
 
     if autopilot:
         set_ego_autopilot_args(ego_vehicle, traffic_manager)
