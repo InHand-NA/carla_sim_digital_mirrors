@@ -81,6 +81,11 @@ def get_mph_speed(vehicle):
     speed = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
     return speed * 2.23694  #   
 
+def get_yaw_angle_velocity(vehicle):
+    """Returns yaw angle velocity in degrees per second."""
+    yaw_angle_velocity = vehicle.get_angular_velocity().z # roll, pitch, yaw in rad/s
+    yaw_angle_velocity_deg = math.degrees(yaw_angle_velocity)
+    return yaw_angle_velocity_deg
 
 def set_ego_autopilot_args(vehicle, tm):
      # Disable auto lane change
@@ -311,7 +316,9 @@ else:
 
 # Dashcam view
 dashcam_location = _config['sim']['dashcam_location'][vehicle_tag]
-dashcam_transform = carla.Transform(carla.Location(x=dashcam_location[0], y=dashcam_location[1], z=dashcam_location[2]))
+dashcam_rotation = _config['sim']['dashcam_rotation']
+dashcam_transform = carla.Transform(carla.Location(x=dashcam_location[0], y=dashcam_location[1], z=dashcam_location[2]), \
+                                    carla.Rotation(pitch=dashcam_rotation[0], yaw=dashcam_rotation[1], roll=dashcam_rotation[2]))
 
 # Tell the world to spawn the sensor, don't forget to attach it to your vehicle actor.
 lmv_sensor = world.spawn_actor(mirror_blueprint, left_mirror_transform, attach_to=vehicle_list[0])
@@ -365,6 +372,14 @@ while not crashed:
     smd['frame_count'] = fid
     seconds = fid / carla_fps
     smd['seconds'] = seconds
+
+    
+    spd_kmh = get_kmh_speed(ego_vehicle)
+    spd_mph = get_mph_speed(ego_vehicle)
+    yaw_velocity = get_yaw_angle_velocity(ego_vehicle)
+    smd['spd_kmh'] = spd_kmh
+    smd['spd_mph'] = spd_mph
+    smd['yaw_velocity'] = yaw_velocity
 
     if autopilot:
         set_ego_autopilot_args(ego_vehicle, traffic_manager)
@@ -422,8 +437,6 @@ while not crashed:
     end_time = time.time()
     #sleep_time(start_time, end_time, 0.05)
     if fid % 20 == 0:
-         spd_kmh = get_kmh_speed(ego_vehicle)
-         spd_mph = get_mph_speed(ego_vehicle)
          print(f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms, Speed: {int(spd_kmh)} km/h, {int(spd_mph)} mph")
     if real_time_mode:
         expected_tm = first_start_tm + ((fid - first_fid) * fixed_delta_seconds)

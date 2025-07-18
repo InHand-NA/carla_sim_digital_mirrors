@@ -20,7 +20,7 @@ sim:
 
   # Make sure the time is similar to real time for a better experience of driving
   real_time_mode: True
-  god_view_mode: False
+  god_view_mode: True
   # Note: different vehicles have different mirror locations, add new locations below
   god_view_location: 
     charger_2020: [-4.0, 0.0, 3.0]
@@ -44,6 +44,8 @@ sim:
     charger_2020: [0.5, 0.0, 1.2]
     wrangler_rubicon: [0.5, 0.0, 1.2]
     firetruck: [3.8, 0.0, 2.8]
+
+  dashcam_rotation: [0.0, 0.0, 0.0]
 
   mirror_location:
     charger_2020:
