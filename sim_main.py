@@ -67,6 +67,24 @@ def process_image_data(image_data, view_id, flip=False):
     smd[view_id] = img
 
 
+def get_vehicle_info(vehicle, cal_spd=False):
+    """Returns vehicle info."""
+    vehicle_info = {}
+    acceleration = vehicle.get_acceleration() # m/s^2
+    angular_velocity = vehicle.get_angular_velocity() # deg/s
+    location = vehicle.get_location()
+    velocity = vehicle.get_velocity()
+
+    vehicle_info['acceleration'] = [acceleration.x, acceleration.y, acceleration.z]
+    vehicle_info['angular_velocity'] = [angular_velocity.x, angular_velocity.y, angular_velocity.z]
+    vehicle_info['location'] = [location.x, location.y, location.z]
+    vehicle_info['velocity'] = [velocity.x, velocity.y, velocity.z]
+    if cal_spd:
+        spd = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2) * 3.6 # km/h
+        vehicle_info['speed'] = spd
+        vehicle_info['yaw_velocity'] = angular_velocity.z # deg/s
+
+    return vehicle_info
 
 def get_kmh_speed(vehicle):
     """Returns speed in km/h."""
@@ -83,8 +101,7 @@ def get_mph_speed(vehicle):
 
 def get_yaw_angle_velocity(vehicle):
     """Returns yaw angle velocity in degrees per second."""
-    yaw_angle_velocity = vehicle.get_angular_velocity().z # roll, pitch, yaw in rad/s
-    yaw_angle_velocity_deg = math.degrees(yaw_angle_velocity)
+    yaw_angle_velocity = vehicle.get_angular_velocity().z # roll, pitch, yaw in deg/s
     return yaw_angle_velocity_deg
 
 def set_ego_autopilot_args(vehicle, tm):
@@ -373,13 +390,8 @@ while not crashed:
     seconds = fid / carla_fps
     smd['seconds'] = seconds
 
-    
-    spd_kmh = get_kmh_speed(ego_vehicle)
-    spd_mph = get_mph_speed(ego_vehicle)
-    yaw_velocity = get_yaw_angle_velocity(ego_vehicle)
-    smd['spd_kmh'] = spd_kmh
-    smd['spd_mph'] = spd_mph
-    smd['yaw_velocity'] = yaw_velocity
+    ego_vehicle_info = get_vehicle_info(ego_vehicle, cal_spd=True)
+    smd['ego_veh_info'] = ego_vehicle_info
 
     if autopilot:
         set_ego_autopilot_args(ego_vehicle, traffic_manager)
@@ -426,18 +438,10 @@ while not crashed:
             lmv_sensor.set_transform(left_mirror_transform)
             rmv_sensor.set_transform(right_mirror_transform)
 
-
-        # TODO - Get vehicle telemetry and post to shared memory
-        '''
-        #v = vehicle.get_velocity()
-        #Speed = (3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
-        #print (Speed)
-        '''
-
     end_time = time.time()
     #sleep_time(start_time, end_time, 0.05)
     if fid % 20 == 0:
-         print(f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms, Speed: {int(spd_kmh)} km/h, {int(spd_mph)} mph")
+         print(f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms")
     if real_time_mode:
         expected_tm = first_start_tm + ((fid - first_fid) * fixed_delta_seconds)
         #clock.tick(10)

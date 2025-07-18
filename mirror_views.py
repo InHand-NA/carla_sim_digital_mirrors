@@ -48,21 +48,24 @@ while True:
         frame_count = -1
         seconds = -1
 
-    if 'spd_kmh' in smd.keys():
-        spd_kmh = int(smd['spd_kmh'])
+    if 'ego_veh_info' in smd.keys():
+        ego_veh_info = smd['ego_veh_info']
+        spd_kmh = ego_veh_info['speed']
+        yaw_velocity = ego_veh_info['yaw_velocity']
     else:
-        spd_kmh = -1    
-
-    if 'yaw_velocity' in smd.keys():
-        yaw_velocity = int(smd['yaw_velocity'])
-    else:
+        spd_kmh = -1
         yaw_velocity = -1
 
     cv2.putText(img, f"Fid: {frame_count} | {int(seconds)}s", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-    cv2.putText(img, f"Spd: {spd_kmh} km/h | Wyaw: {round(yaw_velocity, 2)} deg/s", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    cv2.putText(img, f"Spd: {int(spd_kmh)} km/h | Wyaw: {round(yaw_velocity, 2)} deg/s", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
     cv2.imshow("Dashcam", img)
     #cv2.moveWindow("Dashcam", monitor.x, monitor.height-dashcam_window_size[1]-10)
 
-    cv2.waitKey(20)
+    k = cv2.waitKey(20)
+    if k == 'q':
+        break
 
+print("Closing shared memory")  
 smd.shm.close()
+print("Done")
+

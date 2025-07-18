@@ -5,7 +5,7 @@ carla:
   autopilot: True
   timeout: 20
   no_rendering_mode: True
-  world: 'Town06'
+  world: 'Town04'
   vehicle_tag: 'firetruck'
   #vehicle_tag: 'wrangler_rubicon'
   steering_dead_zone: 0.1   # 0.001 for fanatec
@@ -16,7 +16,7 @@ sim:
   windows:
     front_res: [1800,900]
     mirror_res: [640,480]
-    dashcam_res: [640,360]
+    dashcam_res: [1280,720]
 
   # Make sure the time is similar to real time for a better experience of driving
   real_time_mode: True
