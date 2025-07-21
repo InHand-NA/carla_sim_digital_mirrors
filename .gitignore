@@ -1,3 +1,4 @@
 # Ignore files
 poetry.lock
 .venv/
+__pycache__/

@@ -1,90 +1,76 @@
 import sys
 import carla
-from carla import ColorConverter as cc
 import random
 import time
 import cv2
 import numpy as np
 import math
 import pygame
-from ruamel.yaml import YAML
 from pathlib import Path
 from shared_memory_dict import SharedMemoryDict
 
-from pygame.locals import K_a
-from pygame.locals import K_w
-from pygame.locals import K_d
-from pygame.locals import K_x
-from pygame.locals import K_f
-from pygame.locals import K_t
-from pygame.locals import K_h
-from pygame.locals import K_b
+from config import Config, mirror_parameters
 
+
+smd = SharedMemoryDict(name="tokens", size=10000000)
 
 frame_count = 0
-
-# Define shared memory object and size in bytes
-smd = SharedMemoryDict(name='tokens', size=10000000)
-
-# Read Config File
-configfile=Path("config.yaml")
-_config = YAML(typ='safe').load(configfile)
-
-control_device=_config['sim']['default_control']
-
-class mirror_parameters:
-    def __init__(self):
-        self.left_yaw=-150
-        self.left_pitch=0
-        self.right_yaw=150
-        self.right_pitch=0
 
 
 # Render object to keep and pass the PyGame surface
 class RenderObject(object):
     def __init__(self, width, height):
-        init_image = np.random.randint(0,255,(height,width,3),dtype='uint8')
-        self.surface = pygame.surfarray.make_surface(init_image.swapaxes(0,1))
+        init_image = np.random.randint(0, 255, (height, width, 3), dtype="uint8")
+        self.surface = pygame.surfarray.make_surface(init_image.swapaxes(0, 1))
+
 
 # Camera sensor callback, reshapes raw data from camera into 2D RGB and applies to PyGame surface
 # This is the driver's view
 def pygame_callback(data, obj):
     img = np.reshape(np.copy(data.raw_data), (data.height, data.width, 4))
-    img = img[:,:,:3]
+    img = img[:, :, :3]
     img = img[:, :, ::-1]
 
-    obj.surface = pygame.surfarray.make_surface(img.swapaxes(0,1))
+    obj.surface = pygame.surfarray.make_surface(img.swapaxes(0, 1))
+
 
 # Camera sensor callback, reshapes raw data from camera into 2D RGB and applies to PyGame surface
 # This is the driver's view in left and right rear mirrors
 def process_image_data(image_data, view_id, flip=False):
-    img = np.reshape(np.copy(image_data.raw_data), (image_data.height, image_data.width, 4))
-    img = img[:,:,:3]
+    img = np.reshape(
+        np.copy(image_data.raw_data), (image_data.height, image_data.width, 4)
+    )
+    img = img[:, :, :3]
     img = img[:, :, ::-1]
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)	
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     if flip:
-        img=cv2.flip(img, 1)
+        img = cv2.flip(img, 1)
     smd[view_id] = img
 
 
 def get_vehicle_info(vehicle, cal_spd=False):
     """Returns vehicle info."""
     vehicle_info = {}
-    acceleration = vehicle.get_acceleration() # m/s^2
-    angular_velocity = vehicle.get_angular_velocity() # deg/s
+    acceleration = vehicle.get_acceleration()  # m/s^2
+    angular_velocity = vehicle.get_angular_velocity()  # deg/s
     location = vehicle.get_location()
     velocity = vehicle.get_velocity()
 
-    vehicle_info['acceleration'] = [acceleration.x, acceleration.y, acceleration.z]
-    vehicle_info['angular_velocity'] = [angular_velocity.x, angular_velocity.y, angular_velocity.z]
-    vehicle_info['location'] = [location.x, location.y, location.z]
-    vehicle_info['velocity'] = [velocity.x, velocity.y, velocity.z]
+    vehicle_info["acceleration"] = [acceleration.x, acceleration.y, acceleration.z]
+    vehicle_info["angular_velocity"] = [
+        angular_velocity.x,
+        angular_velocity.y,
+        angular_velocity.z,
+    ]
+    vehicle_info["location"] = [location.x, location.y, location.z]
+    vehicle_info["velocity"] = [velocity.x, velocity.y, velocity.z]
     if cal_spd:
-        spd = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2) * 3.6 # km/h
-        vehicle_info['speed'] = spd
-        vehicle_info['yaw_velocity'] = angular_velocity.z # deg/s
+        spd = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2) * 3.6  # km/h
+        vehicle_info["speed"] = spd
+        vehicle_info["yaw_velocity"] = angular_velocity.z  # deg/s
 
     return vehicle_info
+
 
 def get_kmh_speed(vehicle):
     """Returns speed in km/h."""
@@ -97,107 +83,108 @@ def get_mph_speed(vehicle):
     """Returns speed in mph."""
     velocity = vehicle.get_velocity()
     speed = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
-    return speed * 2.23694  #   
+    return speed * 2.23694  #
+
 
 def get_yaw_angle_velocity(vehicle):
     """Returns yaw angle velocity in degrees per second."""
-    yaw_angle_velocity = vehicle.get_angular_velocity().z # roll, pitch, yaw in deg/s
+    yaw_angle_velocity = vehicle.get_angular_velocity().z  # roll, pitch, yaw in deg/s
     return yaw_angle_velocity_deg
 
+
 def set_ego_autopilot_args(vehicle, tm):
-     # Disable auto lane change
-     tm.auto_lane_change(vehicle, True)
-     # Set random speed 
-     percentage = random.randint(-50, 0)
-     tm.vehicle_percentage_speed_difference(vehicle, percentage)
-     # Set keep right rule
-     #tm.set_keep_right_rule(vehicle, True)
-     # Ignore lights, signs and vehicles
-     tm.ignore_lights_percentage(vehicle, 50)      # 忽略红绿灯
-     tm.ignore_signs_percentage(vehicle, 50)       # 忽略交通标志
-     tm.ignore_vehicles_percentage(vehicle, 0)    # 忽略其他车辆
+    # Disable auto lane change
+    tm.auto_lane_change(vehicle, True)
+    # Set random speed
+    percentage = random.randint(-50, 0)
+    tm.vehicle_percentage_speed_difference(vehicle, percentage)
+    # Set keep right rule
+    # tm.set_keep_right_rule(vehicle, True)
+    # Ignore lights, signs and vehicles
+    tm.ignore_lights_percentage(vehicle, 50)  # 忽略红绿灯
+    tm.ignore_signs_percentage(vehicle, 50)  # 忽略交通标志
+    tm.ignore_vehicles_percentage(vehicle, 0)  # 忽略其他车辆
 
 
-
-class controller ():
-    def __init__(self, vehicle):
+class controller:
+    def __init__(self, vehicle, config: Config):
+        self.vehicle = vehicle
+        self.config = config
         self._control = carla.VehicleControl()
         self._steer_cache = 0.0
 
-        try:
+        # initialize steering wheel
+        pygame.joystick.init()
 
-            # initialize steering wheel
-            pygame.joystick.init()
+        joystick_count = pygame.joystick.get_count()
+        # if joystick_count > 1:
+        #    raise ValueError("Please Connect one Joystick")
+        if joystick_count == 0:
+            raise ValueError("No joystick connected")
 
-            joystick_count = pygame.joystick.get_count()
-            #if joystick_count > 1:
-            #    raise ValueError("Please Connect one Joystick")
-            if joystick_count ==0 :
-                raise ValueError("No joystick connected")
+        self.control_device = config.default_control
+        if self.control_device == "fanatec":
+            self._joystick = pygame.joystick.Joystick(1)
+        else:
+            self._joystick = pygame.joystick.Joystick(0)
 
-            if control_device=='fanatec':
-                self._joystick = pygame.joystick.Joystick(1)
-            else:
-                self._joystick = pygame.joystick.Joystick(0)
+        self._joystick.init()
 
-            self._joystick.init()
-
-            self._steer_idx = _config['sim']['controls'][control_device]['steering_wheel']
-            self._throttle_idx = _config['sim']['controls'][control_device]['throttle']
-            self._brake_idx = _config['sim']['controls'][control_device]['brake']
-            self._reverse_idx = _config['sim']['controls'][control_device]['reverse']
-            self._handbrake_idx = _config['sim']['controls'][control_device]['handbrake']
-            self.vehicle=vehicle
-        except Exception as e: 
-            print(e)
-            print('Shutting Down')
-            client.apply_batch([carla.command.DestroyActor(x) for x in vehicle_list])
-            world.apply_settings(original_settings)
-            pygame.quit()
-            print ("Done")
-            exit (0)
-
+        self._steer_idx = config.controls[self.control_device]["steering_wheel"]
+        self._throttle_idx = config.controls[self.control_device]["throttle"]
+        self._brake_idx = config.controls[self.control_device]["brake"]
+        self._reverse_idx = config.controls[self.control_device]["reverse"]
+        self._handbrake_idx = config.controls[self.control_device]["handbrake"]
+        self.vehicle = vehicle
 
     def parse_vehicle_wheel(self):
         numAxes = self._joystick.get_numaxes()
         jsInputs = [float(self._joystick.get_axis(i)) for i in range(numAxes)]
         # print (jsInputs)
-        jsButtons = [float(self._joystick.get_button(i)) for i in
-                        range(self._joystick.get_numbuttons())]
+        jsButtons = [
+            float(self._joystick.get_button(i))
+            for i in range(self._joystick.get_numbuttons())
+        ]
 
         # Invert Control Signals if needed
-        if control_device=='fanatec':
-            ic=-1
+        if self.control_device == "fanatec":
+            ic = -1
         else:
-            ic=1
+            ic = 1
 
         # Custom function to map range of inputs [1, -1] to outputs [0, 1] i.e 1 from inputs means nothing is pressed
         # For the steering, it seems fine as it is
-        # Steering 
+        # Steering
         K1 = 1.0  # 0.55
         steerCmd = K1 * math.tan(1.1 * jsInputs[self._steer_idx])
-        steer_dead_zone=_config['carla']['steering_dead_zone']
-        if (steerCmd>=-1*steer_dead_zone and steerCmd<=steer_dead_zone):
-            steerCmd=0
+        steer_dead_zone = self.config.steering_dead_zone
+        if steerCmd >= -1 * steer_dead_zone and steerCmd <= steer_dead_zone:
+            steerCmd = 0
 
         # Throttle
         K2 = 1.6  # 1.6
-        throttleCmd = K2 + (2.05 * math.log10(
-            -0.7 * ic * jsInputs[self._throttle_idx] + 1.4) - 1.2) / 0.92
+        throttleCmd = (
+            K2
+            + (2.05 * math.log10(-0.7 * ic * jsInputs[self._throttle_idx] + 1.4) - 1.2)
+            / 0.92
+        )
         if throttleCmd <= 0:
             throttleCmd = 0
         elif throttleCmd > 1:
             throttleCmd = 1
-        throttleCmd=(abs(1-throttleCmd))
+        throttleCmd = abs(1 - throttleCmd)
 
-        # Brake 
-        brakeCmd = 1.6 + (2.05 * math.log10(
-            -0.7 * ic * jsInputs[self._brake_idx] + 1.4) - 1.2) / 0.92
+        # Brake
+        brakeCmd = (
+            1.6
+            + (2.05 * math.log10(-0.7 * ic * jsInputs[self._brake_idx] + 1.4) - 1.2)
+            / 0.92
+        )
         if brakeCmd <= 0:
             brakeCmd = 0
         elif brakeCmd > 1:
             brakeCmd = 1
-        brakeCmd=(abs(1-brakeCmd))
+        brakeCmd = abs(1 - brakeCmd)
 
         self._control.steer = steerCmd
         self._control.brake = brakeCmd
@@ -205,270 +192,299 @@ class controller ():
         self._control.hand_brake = bool(jsButtons[self._handbrake_idx])
 
         self.vehicle.apply_control(self._control)
- 
-
-def stop_sensors(sensors_list):
-    for sensor in sensors_list:
-        sensor.stop()
-
-host=_config['carla']['server']
-port=_config['carla']['port']
-front_window_size=_config['sim']['windows']['front_res']
-mirror_window_size=_config['sim']['windows']['mirror_res']
-dashcam_window_size=_config['sim']['windows']['dashcam_res']
-
-real_time_mode=_config['sim']['real_time_mode']
-autopilot=_config['carla']['autopilot']
-carla_fps=_config['carla']['fps']
-fixed_delta_seconds= 1.0/carla_fps
-god_view_mode=_config['sim']['god_view_mode']
-vehicle_list=[]
-mp=mirror_parameters()
-
-# Connect to the client 
-client = carla.Client(host, port)
-client.set_timeout(_config['carla']['timeout'])
-
-world = client.load_world(_config['carla']['world'])
-
-'''
-# Large World Loading
-world = client.load_world('Town11')
-settings = world.get_settings()
-settings.tile_stream_distance = 2000
-world.apply_settings(settings)
-'''
-
-# Load layered map for Town 01 with minimum layout plus buildings and parked vehicles
-#world = client.load_world('Town10_Opt', carla.MapLayer.Buildings | carla.MapLayer.ParkedVehicles)
-# Toggle all buildings off
-#world.unload_map_layer(carla.MapLayer.Buildings)
 
 
-# Getting the world and
-world = client.get_world()
-original_settings = world.get_settings()
+class Simulator(object):
+    def __init__(self, config: Config, smd: SharedMemoryDict):
+        self.config = config
+        self.vehicle_list = []
+        self.mp = mirror_parameters()
+        self.smd = smd
+        pass
 
-# weather
-weather = world.get_weather()
-weather.sun_azimuth_angle = 344
-weather.sun_altitude_angle = 45
-weather.precipitation = 0
-weather.precipitation_deposits = 0 # puddles
-world.set_weather(weather)
+    def stop_sensors(sensors_list):
+        for sensor in sensors_list:
+            sensor.stop()
 
-# Set up the simulator in synchronous mode
-settings = world.get_settings()
-settings.no_rendering_mode=_config['carla']['no_rendering_mode']
-settings.synchronous_mode = True # Enables synchronous mode
-settings.fixed_delta_seconds = fixed_delta_seconds
-world.apply_settings(settings)
+    def init_sim(self):
+        config = self.config
+        self.vehicle_list = []
+        self.mp = mirror_parameters()
 
-# Set up the TM in synchronous mode
-traffic_manager = client.get_trafficmanager()
-traffic_manager.set_synchronous_mode(True)
+        # Connect to the client
+        client = carla.Client(config.host, config.port)
+        client.set_timeout(config.timeout)
+        self.client = client
 
-# Set a seed so behaviour can be repeated if necessary
-traffic_manager.set_random_device_seed(0)
-random.seed(0)
+        world = client.load_world(config.world)
+        self.world = world
+        """
+        # Large World Loading
+        world = client.load_world('Town11')
+        settings = world.get_settings()
+        settings.tile_stream_distance = 2000
+        world.apply_settings(settings)
+        """
 
-# Print list of available vehicles
-vehicle_blueprints = world.get_blueprint_library().filter('vehicle')
-for car_bp in vehicle_blueprints:
-    print (car_bp)
+        # Load layered map for Town 01 with minimum layout plus buildings and parked vehicles
+        # world = client.load_world('Town10_Opt', carla.MapLayer.Buildings | carla.MapLayer.ParkedVehicles)
+        # Toggle all buildings off
+        # world.unload_map_layer(carla.MapLayer.Buildings)
 
-vehicle_tag=_config['carla']['vehicle_tag']
+        # Getting the world and
+        world = client.get_world()
+        self.original_settings = world.get_settings()
 
-# Instanciating te vehicle to which we attached the sensors
-bp = world.get_blueprint_library().filter(vehicle_tag)[0]
-bp.set_attribute('role_name', 'hero' )
-ego_vehicle = world.spawn_actor(bp, random.choice(world.get_map().get_spawn_points()))
-vehicle_list.append(ego_vehicle)
-ego_vehicle.set_autopilot(autopilot)
+        # weather
+        weather = world.get_weather()
+        weather.sun_azimuth_angle = 344
+        weather.sun_altitude_angle = 45
+        weather.precipitation = 0
+        weather.precipitation_deposits = 0  # puddles
+        world.set_weather(weather)
 
-# Find the blueprint of the sensor.
-mirror_blueprint = world.get_blueprint_library().find('sensor.camera.rgb')
-# Modify the attributes of the blueprint to set image resolution and field of view.
-mirror_blueprint.set_attribute('image_size_x', str(mirror_window_size[0]))
-mirror_blueprint.set_attribute('image_size_y', str(mirror_window_size[0]))
-mirror_blueprint.set_attribute('fov', '120')
+        # Set up the simulator in synchronous mode
+        settings = world.get_settings()
+        settings.no_rendering_mode = config.no_rendering_mode
+        settings.synchronous_mode = True  # Enables synchronous mode
+        settings.fixed_delta_seconds = config.fixed_delta_seconds
+        world.apply_settings(settings)
 
+        # Set up the TM in synchronous mode
+        traffic_manager = client.get_trafficmanager()
+        traffic_manager.set_synchronous_mode(True)
 
-# Find the blueprint of the sensor.
-car_blueprint = world.get_blueprint_library().find('sensor.camera.rgb')
-# Modify the attributes of the blueprint to set image resolution and field of view.
-car_blueprint.set_attribute('image_size_x', str(front_window_size[0]))
-car_blueprint.set_attribute('image_size_y', str(front_window_size[1]))
-car_blueprint.set_attribute('fov', '140')
+        # Set a seed so behaviour can be repeated if necessary
+        traffic_manager.set_random_device_seed(0)
+        random.seed(0)
+        self.traffic_manager = traffic_manager
 
-dashcam_fov = _config['sim']['dashcam_fov']
-dashcam_blueprint = world.get_blueprint_library().find('sensor.camera.rgb')
-dashcam_blueprint.set_attribute('image_size_x', str(dashcam_window_size[0]))
-dashcam_blueprint.set_attribute('image_size_y', str(dashcam_window_size[1]))
-dashcam_blueprint.set_attribute('fov', str(dashcam_fov))
+        # Print list of available vehicles
+        # vehicle_blueprints = world.get_blueprint_library().filter('vehicle')
+        # for car_bp in vehicle_blueprints:
+        #    print (car_bp)
 
-# Set the time in seconds between sensor captures
-#blueprint.set_attribute('sensor_tick', '1')
+        vehicle_tag = config.vehicle_tag
 
-# Provide the position of the sensor relative to the vehicle.
-#left_mirror_transform = carla.Transform(carla.Location(x=.7, y=-1, z=1.2), carla.Rotation(yaw=-150))
-#right_mirror_transform = carla.Transform(carla.Location(x=.7, y=1, z=1.2), carla.Rotation(yaw=150))
+        # Instanciating te vehicle to which we attached the sensors
+        bp = world.get_blueprint_library().filter(vehicle_tag)[0]
+        bp.set_attribute("role_name", "hero")
+        ego_vehicle = world.spawn_actor(
+            bp, random.choice(world.get_map().get_spawn_points())
+        )
+        self.vehicle_list.append(ego_vehicle)
+        ego_vehicle.set_autopilot(config.autopilot)
+        self.ego_vehicle = ego_vehicle
 
+        if config.enable_mirror_view:
+            # Find the blueprint of the sensor.
+            mirror_blueprint = world.get_blueprint_library().find("sensor.camera.rgb")
+            # Modify the attributes of the blueprint to set image resolution and field of view.
+            mirror_blueprint.set_attribute("image_size_x", str(config.rear_window_res[0]))
+            mirror_blueprint.set_attribute("image_size_y", str(config.rear_window_res[1]))
+            mirror_blueprint.set_attribute("fov", "120")
 
-# lookup pre-defined mirror locations based on vehicle tag
+        # Find the blueprint of the sensor. driver's view
+        car_blueprint = world.get_blueprint_library().find("sensor.camera.rgb")
+        # Modify the attributes of the blueprint to set image resolution and field of view.
+        car_blueprint.set_attribute("image_size_x", str(config.front_window_res[0]))
+        car_blueprint.set_attribute("image_size_y", str(config.front_window_res[1]))
+        car_blueprint.set_attribute("fov", "140")
 
-lx, ly,lz = _config['sim']['mirror_location'][vehicle_tag]['left']
-rx, ry, rz = _config['sim']['mirror_location'][vehicle_tag]['right']
-left_mirror_transform = carla.Transform(carla.Location(x=lx, y=ly, z=lz), carla.Rotation(pitch=mp.left_pitch, yaw=mp.left_yaw))
-right_mirror_transform = carla.Transform(carla.Location(x=rx, y=ry, z=rz), carla.Rotation(pitch=mp.right_pitch,yaw=mp.right_yaw))
-# Driver's view
+        dashcam_blueprint = world.get_blueprint_library().find("sensor.camera.rgb")
+        dashcam_blueprint.set_attribute("image_size_x", str(config.dashcam_res[0]))
+        dashcam_blueprint.set_attribute("image_size_y", str(config.dashcam_res[1]))
+        dashcam_blueprint.set_attribute("fov", str(config.dashcam_fov))
 
-if god_view_mode:
-    fx, fy, fz = _config['sim']['god_view_location'][vehicle_tag]
-    pitch, yaw, roll = _config['sim']['god_view_rotation'][vehicle_tag]
-    front_view_transform = carla.Transform(carla.Location(x=fx, y=fy, z=fz), carla.Rotation(pitch=pitch, yaw=yaw, roll=roll))
-else:
-    fx, fy, fz = _config['sim']['front_view_location'][vehicle_tag]
-    front_view_transform = carla.Transform(carla.Location(x=fx, y=fy, z=fz))
+        # Set the time in seconds between sensor captures
+        # blueprint.set_attribute('sensor_tick', '1')
 
-# Dashcam view
-dashcam_location = _config['sim']['dashcam_location'][vehicle_tag]
-dashcam_rotation = _config['sim']['dashcam_rotation']
-dashcam_transform = carla.Transform(carla.Location(x=dashcam_location[0], y=dashcam_location[1], z=dashcam_location[2]), \
-                                    carla.Rotation(pitch=dashcam_rotation[0], yaw=dashcam_rotation[1], roll=dashcam_rotation[2]))
+        # lookup pre-defined mirror locations based on vehicle tag
+        if config.enable_mirror_view:
+            lx, ly, lz = config.mirror_location[vehicle_tag]["left"]
+            rx, ry, rz = config.mirror_location[vehicle_tag]["right"]
+            left_mirror_transform = carla.Transform(
+                carla.Location(x=lx, y=ly, z=lz),
+                carla.Rotation(pitch=self.mp.left_pitch, yaw=self.mp.left_yaw),
+            )
+            right_mirror_transform = carla.Transform(
+                carla.Location(x=rx, y=ry, z=rz),
+                carla.Rotation(pitch=self.mp.right_pitch, yaw=self.mp.right_yaw),
+            )
+        # Driver's view
 
-# Tell the world to spawn the sensor, don't forget to attach it to your vehicle actor.
-lmv_sensor = world.spawn_actor(mirror_blueprint, left_mirror_transform, attach_to=vehicle_list[0])
-rmv_sensor = world.spawn_actor(mirror_blueprint, right_mirror_transform, attach_to=vehicle_list[0])
-fv_sensor = world.spawn_actor(car_blueprint, front_view_transform, attach_to=vehicle_list[0])
-dc_sensor = world.spawn_actor(dashcam_blueprint, dashcam_transform, attach_to=vehicle_list[0])
-# Subscribe to the sensor stream by providing a callback function, this function is
-# called each time a new image is generated by the sensor.
-fv_sensor.listen(lambda data: pygame_callback(data, renderObject))
-rmv_sensor.listen(lambda data: process_image_data(data, "right_mirror_view", True))
-lmv_sensor.listen(lambda data: process_image_data(data, "left_mirror_view", True))
-dc_sensor.listen(lambda data: process_image_data(data, "dashcam_view", False))
-
-sensors_list = [fv_sensor, rmv_sensor, lmv_sensor, dc_sensor]
-
-# Game loop
-crashed = False
-
-# Get camera dimensions
-image_w = car_blueprint.get_attribute("image_size_x").as_int()
-image_h = car_blueprint.get_attribute("image_size_y").as_int()
-renderObject = RenderObject(image_w, image_h)
-
-pygame.init()
-pygame.display.set_caption("Carla Simulator - InADAS")
-display = pygame.display.set_mode(front_window_size,  pygame.HWSURFACE | pygame.DOUBLEBUF, display=0 , vsync=1)  # pygame.FULLSCREEN |
-# Draw black to the display
-display.fill((0,0,0))
-display.blit(renderObject.surface, (0,0))
-pygame.display.flip()
-
-my_controller=controller(ego_vehicle)
-
-if autopilot:
-    set_ego_autopilot_args(ego_vehicle, traffic_manager)
-
-clock = pygame.time.Clock()
-
-
-bbox = ego_vehicle.bounding_box
-extent = bbox.extent  # Vector3D(x, y, z)
-print(f"Bounding box extent of ego vehicle: {extent}")
-
-
-first_start_tm = 0
-first_fid = 0
-while not crashed:
-    start_time = time.time()
-    # Advance the simulation time
-    fid = world.tick()
-    smd['frame_count'] = fid
-    seconds = fid / carla_fps
-    smd['seconds'] = seconds
-
-    ego_vehicle_info = get_vehicle_info(ego_vehicle, cal_spd=True)
-    smd['ego_veh_info'] = ego_vehicle_info
-
-    if autopilot:
-        set_ego_autopilot_args(ego_vehicle, traffic_manager)
-    else:
-        my_controller.parse_vehicle_wheel()
-        my_controller._control.reverse = my_controller._control.gear < 0
-    
-    # Update the display
-    display.blit(renderObject.surface, (0,0))
-    pygame.display.flip()
-
-    for event in pygame.event.get():
-        # If the window is closed, break the while loop
-        if event.type == pygame.QUIT:
-            crashed = True
-        
-        if event.type == pygame.JOYBUTTONDOWN and not autopilot:
-                if event.button == my_controller._reverse_idx:
-                    my_controller._control.gear = 1 if my_controller._control.reverse else -1
-                    print ("Reverse", my_controller._control.gear )
-
-        # Process Mirror Adjustments
-        if event.type == pygame.KEYDOWN:
-            if event.key == K_a:
-                    mp.left_yaw += 1
-            elif event.key == K_d:
-                    mp.left_yaw += -1
-            elif event.key == K_w:
-                    mp.left_pitch += 1
-            elif event.key == K_x:
-                    mp.left_pitch += -1
-
-            elif event.key == K_f:
-                    mp.right_yaw += 1
-            elif event.key == K_h:
-                    mp.right_yaw += -1
-            elif event.key == K_t:
-                    mp.right_pitch += 1
-            elif event.key == K_b:
-                    mp.right_pitch += -1
-
-            left_mirror_transform = carla.Transform(carla.Location(x=lx, y=ly, z=lz), carla.Rotation(pitch=mp.left_pitch, yaw=mp.left_yaw))
-            right_mirror_transform = carla.Transform(carla.Location(x=rx, y=ry, z=rz), carla.Rotation(pitch=mp.right_pitch,yaw=mp.right_yaw))
-            lmv_sensor.set_transform(left_mirror_transform)
-            rmv_sensor.set_transform(right_mirror_transform)
-
-    end_time = time.time()
-    #sleep_time(start_time, end_time, 0.05)
-    if fid % 20 == 0:
-         print(f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms")
-    if real_time_mode:
-        expected_tm = first_start_tm + ((fid - first_fid) * fixed_delta_seconds)
-        #clock.tick(10)
-        clock.tick_busy_loop(carla_fps)
-        this_tm = time.time()
-        if first_start_tm == 0:
-            first_start_tm = this_tm
-            first_fid = fid
+        if config.god_view_mode:
+            fx, fy, fz = config.god_view_location[vehicle_tag]
+            pitch, yaw, roll = config.god_view_rotation[vehicle_tag]
+            front_view_transform = carla.Transform(
+                carla.Location(x=fx, y=fy, z=fz),
+                carla.Rotation(pitch=pitch, yaw=yaw, roll=roll),
+            )
         else:
+            fx, fy, fz = config.front_view_location[vehicle_tag]
+            front_view_transform = carla.Transform(carla.Location(x=fx, y=fy, z=fz))
+
+        # Dashcam view
+        dashcam_location = config.dashcam_location[vehicle_tag]
+        dashcam_rotation = config.dashcam_rotation
+        dashcam_transform = carla.Transform(
+            carla.Location(
+                x=dashcam_location[0], y=dashcam_location[1], z=dashcam_location[2]
+            ),
+            carla.Rotation(
+                pitch=dashcam_rotation[0],
+                yaw=dashcam_rotation[1],
+                roll=dashcam_rotation[2],
+            ),
+        )
+
+        # Tell the world to spawn the sensor, don't forget to attach it to your vehicle actor.
+        fv_sensor = world.spawn_actor(
+            car_blueprint, front_view_transform, attach_to=self.ego_vehicle
+        )
+        dc_sensor = world.spawn_actor(
+            dashcam_blueprint, dashcam_transform, attach_to=self.ego_vehicle
+        )
+        if config.enable_mirror_view:
+            lmv_sensor = world.spawn_actor(
+                mirror_blueprint, left_mirror_transform, attach_to=self.ego_vehicle
+            )
+            rmv_sensor = world.spawn_actor(
+                mirror_blueprint, right_mirror_transform, attach_to=self.ego_vehicle
+            )
+        # Get camera dimensions
+        image_w = car_blueprint.get_attribute("image_size_x").as_int()
+        image_h = car_blueprint.get_attribute("image_size_y").as_int()
+        self.renderObject = RenderObject(image_w, image_h)
+
+        # Subscribe to the sensor stream by providing a callback function, this function is
+        # called each time a new image is generated by the sensor.
+        fv_sensor.listen(lambda data: pygame_callback(data, self.renderObject))
+        dc_sensor.listen(lambda data: process_image_data(data, "dashcam_view", False))
+        self.sensors_list = [fv_sensor, dc_sensor]
+        if config.enable_mirror_view:
+            rmv_sensor.listen(
+                lambda data: process_image_data(data, "right_mirror_view", True)
+            )
+            lmv_sensor.listen(
+                lambda data: process_image_data(data, "left_mirror_view", True)
+            )
+            self.sensors_list.extend([rmv_sensor, lmv_sensor])
+
+        pygame.init()
+        pygame.display.set_caption("Carla Simulator - InADAS")
+        display = pygame.display.set_mode(
+            config.front_window_res,
+            pygame.HWSURFACE | pygame.DOUBLEBUF,
+            display=0,
+            vsync=1,
+        )  # pygame.FULLSCREEN |
+        # Draw black to the display
+        display.fill((0, 0, 0))
+        display.blit(self.renderObject.surface, (0, 0))
+        self.display = display
+        pygame.display.flip()
+
+        self.my_controller = controller(self.ego_vehicle, config)
+
+        if config.autopilot:
+            set_ego_autopilot_args(self.ego_vehicle, self.traffic_manager)
+
+        bbox = ego_vehicle.bounding_box
+        extent = bbox.extent  # Vector3D(x, y, z)
+        print(f"Bounding box extent of ego vehicle: {extent}")
+
+    def run_sim(self):
+        # Game loop
+        crashed = False
+        clock = pygame.time.Clock()
+        first_start_tm = 0
+        first_fid = 0
+        while not crashed:
+            start_time = time.time()
+            # Advance the simulation time
+            fid = self.world.tick()
+            self.smd["frame_count"] = fid
+            seconds = fid / self.config.fps
+            self.smd["seconds"] = seconds
+
+            ego_vehicle_info = get_vehicle_info(self.ego_vehicle, cal_spd=True)
+            self.smd["ego_veh_info"] = ego_vehicle_info
+
+            if self.config.autopilot:
+                set_ego_autopilot_args(self.ego_vehicle, self.traffic_manager)
+            else:
+                self.my_controller.parse_vehicle_wheel()
+                self.my_controller._control.reverse = (
+                    self.my_controller._control.gear < 0
+                )
+
+            # Update the display
+            self.display.blit(self.renderObject.surface, (0, 0))
+            pygame.display.flip()
+
+            for event in pygame.event.get():
+                # If the window is closed, break the while loop
+                if event.type == pygame.QUIT:
+                    crashed = True
+
+                if event.type == pygame.JOYBUTTONDOWN and not self.config.autopilot:
+                    if event.button == self.my_controller._reverse_idx:
+                        self.my_controller._control.gear = (
+                            1 if self.my_controller._control.reverse else -1
+                        )
+                        print("Reverse", self.my_controller._control.gear)
+
+            end_time = time.time()
+            # sleep_time(start_time, end_time, 0.05)
             if fid % 20 == 0:
-                print(f"  Expected time: {expected_tm}, current time: {this_tm}, offset: {int((this_tm - expected_tm)*1000)}ms")
+                print(
+                    f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms"
+                )
+            if self.config.real_time_mode:
+                expected_tm = first_start_tm + (
+                    (fid - first_fid) * self.config.fixed_delta_seconds
+                )
+                # clock.tick(10)
+                clock.tick_busy_loop(self.config.fps)
+                this_tm = time.time()
+                if first_start_tm == 0:
+                    first_start_tm = this_tm
+                    first_fid = fid
+                else:
+                    if fid % 20 == 0:
+                        print(
+                            f"  Expected time: {expected_tm}, current time: {this_tm}, offset: {int((this_tm - expected_tm) * 1000)}ms"
+                        )
 
-print('Shutting Down...')
-stop_sensors(sensors_list)
+        print("Shutting Down...")
+        self.stop_sensors(self.sensors_list)
+        print("Destroying actors...")
+        self.client.apply_batch(
+            [carla.command.DestroyActor(x) for x in self.vehicle_list]
+        )
+        print("Restoring original settings...")
+        self.world.apply_settings(self.original_settings)
+        print("Quitting PyGame display...")
+        pygame.display.quit()  # 明确退出显示模块
+        # pygame.mixer.quit()
+        print("Quitting PyGame...")
 
-print('Destroying actors...')
-client.apply_batch([carla.command.DestroyActor(x) for x in vehicle_list])
-print('Restoring original settings...')
-world.apply_settings(original_settings)
-print('Quitting PyGame display...')
-pygame.display.quit()  # 明确退出显示模块
-#pygame.mixer.quit()
-print('Quitting PyGame...')
+        self.smd.shm.close()
+        self.smd.shm.unlink()
+        del self.smd
+        pygame.quit()
+        print("Done")
+        sys.exit()
+        pass
 
-smd.shm.close()
-smd.shm.unlink()
-del smd
-pygame.quit()
-print ("Done")
-sys.exit()
+
+def main():
+    config = Config()
+    sim = Simulator(config, smd)
+    sim.init_sim()
+    sim.run_sim()
+
+
+if __name__ == "__main__":
+    main()

@@ -19,6 +19,7 @@ sim:
     dashcam_res: [1280,720]
 
   # Make sure the time is similar to real time for a better experience of driving
+  enable_mirror_view: False
   real_time_mode: True
   god_view_mode: True
   # Note: different vehicles have different mirror locations, add new locations below
