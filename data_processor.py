@@ -14,6 +14,37 @@ LANES_DATA_FILE = DATA_DIR + "lanes_data.json"
 
 ##smd = SharedMemoryDict(name='tokens', size=10000000)
 
+data_processor_loop = True
+# 使用字典来管理多个视频写入器
+video_writers = {}
+
+frame_count = 0
+
+def save_video(img, view_id, fps):
+    global video_writers
+    global frame_count
+
+    # 为每个 view_id 创建独立的视频写入器
+    if view_id not in video_writers:
+        video_writers[view_id] = cv2.VideoWriter(
+            DATA_DIR + f"{view_id}.mp4", 
+            cv2.VideoWriter_fourcc(*'mp4v'), 
+            fps, 
+            (img.shape[1], img.shape[0])
+        )
+    video_writers[view_id].write(img)
+    frame_count += 1
+
+def close_all_videos():
+    """关闭所有视频写入器"""
+    global video_writers
+    for writer in video_writers.values():
+        if writer is not None:
+            writer.release()
+    video_writers.clear()
+    print("All videos closed")
+
+
 
 def store_veh_motion_data(frame_id, veh_mot_info):
     if not os.path.exists(VEH_MOTION_DATA_FILE):
@@ -43,6 +74,9 @@ def store_lanes_data(frame_id, lanes_data):
             f.write("\n")
 
 def process_data(smd, lock):
+    # 在程序退出时调用
+    global data_processor_loop
+
     # Read Config File
     configfile=Path("config.yaml")
     _config = YAML(typ='safe').load(configfile)
@@ -60,7 +94,9 @@ def process_data(smd, lock):
     if os.path.exists(LANES_DATA_FILE):
         os.remove(LANES_DATA_FILE)
 
-    while True:
+    os.system("rm -rf " + DATA_DIR + "*.mp4")
+
+    while data_processor_loop:
         # Left Mirror
         lock.acquire()
         if 'left_mirror_view' in smd.keys():
@@ -85,8 +121,10 @@ def process_data(smd, lock):
         lock.acquire()
         if 'dashcam_view' in smd.keys():
             img = smd['dashcam_view']
+            fps = smd['fps']
         else:
             img = dc_no_img
+            fps = -1
         if 'frame_count' in smd.keys():
             frame_count = smd['frame_count']
             seconds = smd['seconds']
@@ -116,16 +154,24 @@ def process_data(smd, lock):
                 # TODO: this block should be locked
                 frame_data = data_fifo.pop(0)
                 smd['data_fifo'] = data_fifo # update the db
-                store_veh_motion_data(frame_data['frame_id'], frame_data['ego_veh_info'])
-                store_lanes_data(frame_data['frame_id'], frame_data['lanes_data'])
+                if 'dashcam_img' in frame_data.keys():
+                    store_veh_motion_data(frame_data['frame_id'], frame_data['ego_veh_info'])
+                    store_lanes_data(frame_data['frame_id'], frame_data['lanes_data'])
+                    save_video(frame_data['dashcam_img'], 'dashcam', fps)
+
+                    ##cv2.imshow("Dashcam2", frame_data['dashcam_img'])
+                else:
+                    print("!!!! No dashcam image found, ignore this frame, frame_id: ", frame_data['frame_id'])
                 # todo: store dashcam image
 
         lock.release()
 
-        k = cv2.waitKey(20)
-        if k == 'q':
-            break
+        cv2.waitKey(20)
 
+    # exit the loop
+    print("Exiting data processor loop")
+    close_all_videos()
+    print("All videos closed")
 
 
 

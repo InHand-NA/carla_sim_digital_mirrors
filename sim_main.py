@@ -15,7 +15,7 @@ import json
 from config import Config, mirror_parameters
 from carla_gather_vehicle_data import get_vehicle_info
 from carla_gather_lane import gather_lane_data
-from data_processor import process_data, DATA_DIR
+from data_processor import process_data, DATA_DIR, data_processor_loop
 
 
 config = Config()
@@ -176,7 +176,7 @@ def get_vehicle_metadata(vehicle):
     return metadata
 
 
-def save_metadata(vehicle, dashcam_height, dashcam_width, dashcam_fov, dashcam_location, dashcam_rotation):
+def save_metadata(vehicle, dashcam_height, dashcam_width, dashcam_fov, dashcam_location, dashcam_rotation, fps):
     veh_meta = get_vehicle_metadata(vehicle)
     
     metadata = {
@@ -186,7 +186,8 @@ def save_metadata(vehicle, dashcam_height, dashcam_width, dashcam_fov, dashcam_l
             "width": dashcam_width,
             "fov": dashcam_fov,
             "location": [dashcam_location[0], dashcam_location[1], dashcam_location[2]],
-            "rpy": [dashcam_rotation[0], dashcam_rotation[1], dashcam_rotation[2]]
+            "rpy": [dashcam_rotation[0], dashcam_rotation[1], dashcam_rotation[2]],
+            "fps": fps
         }
     }
     with open(DATA_DIR + "metadata.json", "w") as f:
@@ -202,7 +203,7 @@ class Simulator(object):
         self.lock = lock
         pass
 
-    def stop_sensors(sensors_list):
+    def stop_sensors(self,sensors_list):
         for sensor in sensors_list:
             sensor.stop()
 
@@ -403,7 +404,8 @@ class Simulator(object):
 
         save_metadata(self.ego_vehicle, 
                       config.dashcam_res[1], config.dashcam_res[0], config.dashcam_fov, 
-                      config.dashcam_location[vehicle_tag], config.dashcam_rotation)
+                      config.dashcam_location[vehicle_tag], config.dashcam_rotation,
+                      self.config.fps)
 
     def run_sim(self):
         # Game loop
@@ -420,6 +422,7 @@ class Simulator(object):
             self.smd["frame_count"] = fid
             seconds = fid / self.config.fps
             self.smd["seconds"] = seconds
+            self.smd["fps"] = self.config.fps
             lock.release()
             ego_vehicle_info = get_vehicle_info(self.ego_vehicle, cal_spd=True)
             lock.acquire()
@@ -433,14 +436,16 @@ class Simulator(object):
                 "ego_veh_info": ego_vehicle_info,
                 "lanes_data": lanes_data,
             }
-            # if 'dashcam_view' in self.smd.keys():
-            #    frame_data["dashcam_img"] = self.smd["dashcam_view"]
-            # TODO: this block should be locked
-            self.lock.acquire()
-            data_fifo = self.smd["data_fifo"]
-            data_fifo.append(frame_data)
-            self.smd["data_fifo"] = data_fifo
-            self.lock.release()
+            if 'dashcam_view' in self.smd.keys():
+                frame_data["dashcam_img"] = self.smd["dashcam_view"]
+                # TODO: this block should be locked
+                self.lock.acquire()
+                data_fifo = self.smd["data_fifo"]
+                data_fifo.append(frame_data)
+                self.smd["data_fifo"] = data_fifo
+                self.lock.release()                
+            else:
+                print("!!!! No dashcam image found, ignore this frame, frame_id: ", fid)
 
             if self.config.autopilot:
                 set_ego_autopilot_args(self.ego_vehicle, self.traffic_manager)
@@ -470,7 +475,7 @@ class Simulator(object):
             # sleep_time(start_time, end_time, 0.05)
             if fid % 20 == 0:
                 print(
-                    f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms, fifo_len: {len(data_fifo)}"
+                    f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms"
                 )
             if self.config.real_time_mode:
                 expected_tm = first_start_tm + (
@@ -490,6 +495,7 @@ class Simulator(object):
 
         print("Shutting Down...")
         self.stop_sensors(self.sensors_list)
+        #close_all_videos()
         print("Destroying actors...")
         self.client.apply_batch(
             [carla.command.DestroyActor(x) for x in self.vehicle_list]
@@ -518,6 +524,7 @@ def run_sim_process(config, smd, lock):
 
 
 def main():
+    global data_processor_loop
     # create a new process to run the sim
     main_process = multiprocessing.Process(
         target=run_sim_process, args=(config, smd, lock)
@@ -531,8 +538,8 @@ def main():
 
     main_process.join()
     print("Main process joined")
-    if data_process.is_alive():
-        data_process.kill()
+    data_processor_loop = False
+    data_process.join()
 
 
 if __name__ == "__main__":
