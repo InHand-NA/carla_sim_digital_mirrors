@@ -1,3 +1,4 @@
+import multiprocessing
 import sys
 import carla
 import random
@@ -7,14 +8,27 @@ import numpy as np
 import math
 import pygame
 from pathlib import Path
+from multiprocessing import Lock
 from shared_memory_dict import SharedMemoryDict
+import json
 
 from config import Config, mirror_parameters
+from carla_gather_vehicle_data import get_vehicle_info
+from carla_gather_lane import gather_lane_data
+from data_processor import process_data, DATA_DIR
 
 
+config = Config()
 smd = SharedMemoryDict(name="tokens", size=10000000)
+lock = Lock()
 
-frame_count = 0
+
+# To use multiprocessing.Lock on write operations of shared memory dict set environment variable SHARED_MEMORY_USE_LOCK=1.
+
+
+# smd = SharedMemoryDict(name="tokens", size=10000000)
+
+# frame_count = 0
 
 
 # Render object to keep and pass the PyGame surface
@@ -45,51 +59,9 @@ def process_image_data(image_data, view_id, flip=False):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     if flip:
         img = cv2.flip(img, 1)
+    lock.acquire()
     smd[view_id] = img
-
-
-def get_vehicle_info(vehicle, cal_spd=False):
-    """Returns vehicle info."""
-    vehicle_info = {}
-    acceleration = vehicle.get_acceleration()  # m/s^2
-    angular_velocity = vehicle.get_angular_velocity()  # deg/s
-    location = vehicle.get_location()
-    velocity = vehicle.get_velocity()
-
-    vehicle_info["acceleration"] = [acceleration.x, acceleration.y, acceleration.z]
-    vehicle_info["angular_velocity"] = [
-        angular_velocity.x,
-        angular_velocity.y,
-        angular_velocity.z,
-    ]
-    vehicle_info["location"] = [location.x, location.y, location.z]
-    vehicle_info["velocity"] = [velocity.x, velocity.y, velocity.z]
-    if cal_spd:
-        spd = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2) * 3.6  # km/h
-        vehicle_info["speed"] = spd
-        vehicle_info["yaw_velocity"] = angular_velocity.z  # deg/s
-
-    return vehicle_info
-
-
-def get_kmh_speed(vehicle):
-    """Returns speed in km/h."""
-    velocity = vehicle.get_velocity()
-    speed = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
-    return speed * 3.6  # Convert m/s to km/h
-
-
-def get_mph_speed(vehicle):
-    """Returns speed in mph."""
-    velocity = vehicle.get_velocity()
-    speed = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
-    return speed * 2.23694  #
-
-
-def get_yaw_angle_velocity(vehicle):
-    """Returns yaw angle velocity in degrees per second."""
-    yaw_angle_velocity = vehicle.get_angular_velocity().z  # roll, pitch, yaw in deg/s
-    return yaw_angle_velocity_deg
+    lock.release()
 
 
 def set_ego_autopilot_args(vehicle, tm):
@@ -194,12 +166,40 @@ class controller:
         self.vehicle.apply_control(self._control)
 
 
+def get_vehicle_metadata(vehicle):
+    bbox = vehicle.bounding_box
+    extent = bbox.extent  # Vector3D(x, y, z)    
+    metadata = {
+        "id": vehicle.id,
+        "size": [round(extent.x*2, 2), round(extent.y*2, 2), round(extent.z*2, 2)]
+    }
+    return metadata
+
+
+def save_metadata(vehicle, dashcam_height, dashcam_width, dashcam_fov, dashcam_location, dashcam_rotation):
+    veh_meta = get_vehicle_metadata(vehicle)
+    
+    metadata = {
+        "vehicle": veh_meta,
+        "dashcam": {
+            "height": dashcam_height,
+            "width": dashcam_width,
+            "fov": dashcam_fov,
+            "location": [dashcam_location[0], dashcam_location[1], dashcam_location[2]],
+            "rpy": [dashcam_rotation[0], dashcam_rotation[1], dashcam_rotation[2]]
+        }
+    }
+    with open(DATA_DIR + "metadata.json", "w") as f:
+        json.dump(metadata, f)
+
+
 class Simulator(object):
-    def __init__(self, config: Config, smd: SharedMemoryDict):
+    def __init__(self, config: Config, smd: SharedMemoryDict, lock: Lock):
         self.config = config
         self.vehicle_list = []
         self.mp = mirror_parameters()
         self.smd = smd
+        self.lock = lock
         pass
 
     def stop_sensors(sensors_list):
@@ -280,8 +280,12 @@ class Simulator(object):
             # Find the blueprint of the sensor.
             mirror_blueprint = world.get_blueprint_library().find("sensor.camera.rgb")
             # Modify the attributes of the blueprint to set image resolution and field of view.
-            mirror_blueprint.set_attribute("image_size_x", str(config.rear_window_res[0]))
-            mirror_blueprint.set_attribute("image_size_y", str(config.rear_window_res[1]))
+            mirror_blueprint.set_attribute(
+                "image_size_x", str(config.rear_window_res[0])
+            )
+            mirror_blueprint.set_attribute(
+                "image_size_y", str(config.rear_window_res[1])
+            )
             mirror_blueprint.set_attribute("fov", "120")
 
         # Find the blueprint of the sensor. driver's view
@@ -332,9 +336,9 @@ class Simulator(object):
                 x=dashcam_location[0], y=dashcam_location[1], z=dashcam_location[2]
             ),
             carla.Rotation(
-                pitch=dashcam_rotation[0],
-                yaw=dashcam_rotation[1],
-                roll=dashcam_rotation[2],
+                pitch=dashcam_rotation[1],
+                yaw=dashcam_rotation[2],
+                roll=dashcam_rotation[0],
             ),
         )
 
@@ -393,6 +397,13 @@ class Simulator(object):
         bbox = ego_vehicle.bounding_box
         extent = bbox.extent  # Vector3D(x, y, z)
         print(f"Bounding box extent of ego vehicle: {extent}")
+        lock.acquire()
+        self.smd["data_fifo"] = []
+        lock.release()
+
+        save_metadata(self.ego_vehicle, 
+                      config.dashcam_res[1], config.dashcam_res[0], config.dashcam_fov, 
+                      config.dashcam_location[vehicle_tag], config.dashcam_rotation)
 
     def run_sim(self):
         # Game loop
@@ -400,16 +411,36 @@ class Simulator(object):
         clock = pygame.time.Clock()
         first_start_tm = 0
         first_fid = 0
+        print("Running simulation")
         while not crashed:
             start_time = time.time()
             # Advance the simulation time
             fid = self.world.tick()
+            lock.acquire()
             self.smd["frame_count"] = fid
             seconds = fid / self.config.fps
             self.smd["seconds"] = seconds
-
+            lock.release()
             ego_vehicle_info = get_vehicle_info(self.ego_vehicle, cal_spd=True)
+            lock.acquire()
             self.smd["ego_veh_info"] = ego_vehicle_info
+            lanes_data = gather_lane_data(self.world, self.ego_vehicle)
+            self.smd["lanes_data"] = lanes_data
+            lock.release()
+            # push data of current frame to fifo
+            frame_data = {
+                "frame_id": fid,
+                "ego_veh_info": ego_vehicle_info,
+                "lanes_data": lanes_data,
+            }
+            # if 'dashcam_view' in self.smd.keys():
+            #    frame_data["dashcam_img"] = self.smd["dashcam_view"]
+            # TODO: this block should be locked
+            self.lock.acquire()
+            data_fifo = self.smd["data_fifo"]
+            data_fifo.append(frame_data)
+            self.smd["data_fifo"] = data_fifo
+            self.lock.release()
 
             if self.config.autopilot:
                 set_ego_autopilot_args(self.ego_vehicle, self.traffic_manager)
@@ -439,7 +470,7 @@ class Simulator(object):
             # sleep_time(start_time, end_time, 0.05)
             if fid % 20 == 0:
                 print(
-                    f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms"
+                    f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms, fifo_len: {len(data_fifo)}"
                 )
             if self.config.real_time_mode:
                 expected_tm = first_start_tm + (
@@ -479,11 +510,29 @@ class Simulator(object):
         pass
 
 
-def main():
-    config = Config()
-    sim = Simulator(config, smd)
+def run_sim_process(config, smd, lock):
+    sim = Simulator(config, smd, lock)
+
     sim.init_sim()
     sim.run_sim()
+
+
+def main():
+    # create a new process to run the sim
+    main_process = multiprocessing.Process(
+        target=run_sim_process, args=(config, smd, lock)
+    )
+    data_process = multiprocessing.Process(target=process_data, args=(smd, lock))
+
+    main_process.start()
+    # create a new process to process the data
+    time.sleep(5)
+    data_process.start()
+
+    main_process.join()
+    print("Main process joined")
+    if data_process.is_alive():
+        data_process.kill()
 
 
 if __name__ == "__main__":

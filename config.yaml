@@ -46,7 +46,7 @@ sim:
     wrangler_rubicon: [0.5, 0.0, 1.2]
     firetruck: [3.8, 0.0, 2.8]
 
-  dashcam_rotation: [0.0, 0.0, 0.0]
+  dashcam_rotation: [0.0, 0.0, 0.0] # Roll, Pitch, Yaw
 
   mirror_location:
     charger_2020:
