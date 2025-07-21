@@ -16,6 +16,7 @@ InADAS项目坐标系：
 - ISO8855坐标系： 右手坐标系，原点在自车相机安装位置的地面投影，x轴指向自车前进方向，y轴指向自车左侧，z轴指向上方
 """
 
+
 def coor_world_to_vehicle(ego_transform, world_location):
     # 将世界坐标转换为右手车辆坐标
     # ego_transform 是自车的变换矩阵, 可以把自车坐标变换为世界坐标
@@ -24,19 +25,21 @@ def coor_world_to_vehicle(ego_transform, world_location):
     # Get the inverse matrix of ego_transform
     Ri = ego_transform.get_inverse_matrix()
     # Transform the world_location to vehicle coordinate
-    ext_world_location = np.array([world_location.x, world_location.y, world_location.z, 1.0])
+    ext_world_location = np.array(
+        [world_location.x, world_location.y, world_location.z, 1.0]
+    )
     vehicle_coord = np.dot(Ri, ext_world_location)
     vehicle_coord = vehicle_coord[:3]
     return vehicle_coord
 
 
-def get_forward_lane(waypoint, ego_transform, distance=100):
+def get_forward_lane(waypoint, ego_transform, cam_locx=3.8, distance=100):
     """
     Get the forward lane of the ego vehicle
     """
     step = 1.0
     count = 0
-    #segment = []
+    # segment = []
     left_lane_line = []
     right_lane_line = []
     current = waypoint
@@ -49,16 +52,28 @@ def get_forward_lane(waypoint, ego_transform, distance=100):
         vehicle_coord = coor_world_to_vehicle(ego_transform, Location(x=x, y=y, z=z))
         lane_width = current.lane_width
 
-        #segment.append([vehicle_coord[0], vehicle_coord[1], vehicle_coord[2], lane_width])
+        # segment.append([vehicle_coord[0], vehicle_coord[1], vehicle_coord[2], lane_width])
         # 右手坐标系
-        left_lane_line.append([float(vehicle_coord[0]), float(-vehicle_coord[1] + lane_width/2), 
-                               float(vehicle_coord[2]), float(lane_width)])
-        right_lane_line.append([float(vehicle_coord[0]), float(-vehicle_coord[1] - lane_width/2), 
-                               float(vehicle_coord[2]), float(lane_width)])
+        left_lane_line.append(
+            [
+                float(vehicle_coord[0] - cam_locx),
+                float(-vehicle_coord[1] + lane_width / 2),
+                float(vehicle_coord[2]),
+                float(lane_width),
+            ]
+        )
+        right_lane_line.append(
+            [
+                float(vehicle_coord[0] - cam_locx),
+                float(-vehicle_coord[1] - lane_width / 2),
+                float(vehicle_coord[2]),
+                float(lane_width),
+            ]
+        )
         next_list = current.next(step)
         if not next_list:
             break
-        #print("next_list len:", len(next_list))
+        # print("next_list len:", len(next_list))
         current = next_list[0]
         count += step
     return left_lane_line, right_lane_line
@@ -71,6 +86,7 @@ def print_lane_data(lane_data):
     for data in lane_data:
         print(data)
 
+
 def print_lanes_data(lanes_data):
     """
     Print the lanes data
@@ -79,6 +95,7 @@ def print_lanes_data(lanes_data):
         line_name = ["left_left", "left", "right", "right_right"]
         print(f"{line_name[i]} lane:")
         print_lane_data(lane_data)
+
 
 def figure_to_cv2_image(fig, size=(250, 250)):
     """
@@ -112,7 +129,8 @@ def draw_lane_data(lane_data):
     img = figure_to_cv2_image(fig)
     return img
 
-def gather_lane_data(world, ego_vehicle, log=False):
+
+def gather_lane_data(world, ego_vehicle, cam_locx=3.8, log=False):
     """
     Gather lane data for the ego vehicle
     """
@@ -132,26 +150,32 @@ def gather_lane_data(world, ego_vehicle, log=False):
     left_lane_wp = waypoint.get_left_lane()
     right_lane_wp = waypoint.get_right_lane()
 
-    #x, y, z = waypoint.transform.location.x, waypoint.transform.location.y, waypoint.transform.location.z
-    #print([x, y, z, lane_width])
-    left_lane_line, right_lane_line = get_forward_lane(waypoint, ego_transform, distance=100.0)
+    # x, y, z = waypoint.transform.location.x, waypoint.transform.location.y, waypoint.transform.location.z
+    # print([x, y, z, lane_width])
+    left_lane_line, right_lane_line = get_forward_lane(
+        waypoint, ego_transform, cam_locx=cam_locx, distance=100.0
+    )
     if left_lane_wp is not None:
-        left_left_lane_line, left_right_lane_line = get_forward_lane(left_lane_wp, ego_transform, distance=100.0)
+        left_left_lane_line, left_right_lane_line = get_forward_lane(
+            left_lane_wp, ego_transform, cam_locx=cam_locx, distance=100.0
+        )
     else:
         left_left_lane_line = None
         left_right_lane_line = None
     if right_lane_wp is not None:
-        right_left_lane_line, right_right_lane_line = get_forward_lane(right_lane_wp, ego_transform, distance=100.0)
+        right_left_lane_line, right_right_lane_line = get_forward_lane(
+            right_lane_wp, ego_transform, cam_locx=cam_locx, distance=100.0
+        )
     else:
         right_left_lane_line = None
         right_right_lane_line = None
-    #img = draw_lane_data(forward_lane)
-    #img = None
+    # img = draw_lane_data(forward_lane)
+    # img = None
     lanes_data = [
         left_left_lane_line,
         left_lane_line,
         right_lane_line,
-        right_right_lane_line
+        right_right_lane_line,
     ]
     if log:
         print_lanes_data(lanes_data)

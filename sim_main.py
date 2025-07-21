@@ -416,6 +416,8 @@ class Simulator(object):
         self.smd["data_fifo"] = []
         lock.release()
 
+        self.cam_locx = config.dashcam_location[vehicle_tag][0]
+
         save_metadata(
             self.ego_vehicle,
             config.dashcam_res[1],
@@ -446,7 +448,7 @@ class Simulator(object):
             ego_vehicle_info = get_vehicle_info(self.ego_vehicle, cal_spd=True)
             lock.acquire()
             self.smd["ego_veh_info"] = ego_vehicle_info
-            lanes_data = gather_lane_data(self.world, self.ego_vehicle)
+            lanes_data = gather_lane_data(self.world, self.ego_vehicle, self.cam_locx)
             self.smd["lanes_data"] = lanes_data
             lock.release()
             # push data of current frame to fifo
