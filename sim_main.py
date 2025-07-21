@@ -11,6 +11,8 @@ from pathlib import Path
 from multiprocessing import Lock
 from shared_memory_dict import SharedMemoryDict
 import json
+import os
+import signal
 
 from config import Config, mirror_parameters
 from carla_gather_vehicle_data import get_vehicle_info
@@ -168,17 +170,29 @@ class controller:
 
 def get_vehicle_metadata(vehicle):
     bbox = vehicle.bounding_box
-    extent = bbox.extent  # Vector3D(x, y, z)    
+    extent = bbox.extent  # Vector3D(x, y, z)
     metadata = {
         "id": vehicle.id,
-        "size": [round(extent.x*2, 2), round(extent.y*2, 2), round(extent.z*2, 2)]
+        "size": [
+            round(extent.x * 2, 2),
+            round(extent.y * 2, 2),
+            round(extent.z * 2, 2),
+        ],
     }
     return metadata
 
 
-def save_metadata(vehicle, dashcam_height, dashcam_width, dashcam_fov, dashcam_location, dashcam_rotation, fps):
+def save_metadata(
+    vehicle,
+    dashcam_height,
+    dashcam_width,
+    dashcam_fov,
+    dashcam_location,
+    dashcam_rotation,
+    fps,
+):
     veh_meta = get_vehicle_metadata(vehicle)
-    
+
     metadata = {
         "vehicle": veh_meta,
         "dashcam": {
@@ -187,8 +201,8 @@ def save_metadata(vehicle, dashcam_height, dashcam_width, dashcam_fov, dashcam_l
             "fov": dashcam_fov,
             "location": [dashcam_location[0], dashcam_location[1], dashcam_location[2]],
             "rpy": [dashcam_rotation[0], dashcam_rotation[1], dashcam_rotation[2]],
-            "fps": fps
-        }
+            "fps": fps,
+        },
     }
     with open(DATA_DIR + "metadata.json", "w") as f:
         json.dump(metadata, f)
@@ -203,7 +217,7 @@ class Simulator(object):
         self.lock = lock
         pass
 
-    def stop_sensors(self,sensors_list):
+    def stop_sensors(self, sensors_list):
         for sensor in sensors_list:
             sensor.stop()
 
@@ -402,10 +416,15 @@ class Simulator(object):
         self.smd["data_fifo"] = []
         lock.release()
 
-        save_metadata(self.ego_vehicle, 
-                      config.dashcam_res[1], config.dashcam_res[0], config.dashcam_fov, 
-                      config.dashcam_location[vehicle_tag], config.dashcam_rotation,
-                      self.config.fps)
+        save_metadata(
+            self.ego_vehicle,
+            config.dashcam_res[1],
+            config.dashcam_res[0],
+            config.dashcam_fov,
+            config.dashcam_location[vehicle_tag],
+            config.dashcam_rotation,
+            self.config.fps,
+        )
 
     def run_sim(self):
         # Game loop
@@ -436,14 +455,14 @@ class Simulator(object):
                 "ego_veh_info": ego_vehicle_info,
                 "lanes_data": lanes_data,
             }
-            if 'dashcam_view' in self.smd.keys():
+            if "dashcam_view" in self.smd.keys():
                 frame_data["dashcam_img"] = self.smd["dashcam_view"]
                 # TODO: this block should be locked
                 self.lock.acquire()
                 data_fifo = self.smd["data_fifo"]
                 data_fifo.append(frame_data)
                 self.smd["data_fifo"] = data_fifo
-                self.lock.release()                
+                self.lock.release()
             else:
                 print("!!!! No dashcam image found, ignore this frame, frame_id: ", fid)
 
@@ -495,7 +514,7 @@ class Simulator(object):
 
         print("Shutting Down...")
         self.stop_sensors(self.sensors_list)
-        #close_all_videos()
+        # close_all_videos()
         print("Destroying actors...")
         self.client.apply_batch(
             [carla.command.DestroyActor(x) for x in self.vehicle_list]
@@ -538,7 +557,11 @@ def main():
 
     main_process.join()
     print("Main process joined")
-    data_processor_loop = False
+
+    target_pid = data_process.pid
+
+    # 发送信号给指定进程
+    os.kill(target_pid, signal.SIGUSR1)
     data_process.join()
 
 
