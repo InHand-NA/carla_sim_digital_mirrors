@@ -43,7 +43,8 @@ def get_forward_lane(waypoint, ego_transform, cam_locx=3.8, distance=100):
     left_lane_line = []
     right_lane_line = []
     current = waypoint
-    while current and not current.is_junction and count < distance:
+    #while current and not current.is_junction and count < distance:
+    while current and count < distance:
         x, y, z = (
             current.transform.location.x,
             current.transform.location.y,
@@ -53,7 +54,7 @@ def get_forward_lane(waypoint, ego_transform, cam_locx=3.8, distance=100):
         lane_width = current.lane_width
 
         # segment.append([vehicle_coord[0], vehicle_coord[1], vehicle_coord[2], lane_width])
-        # 右手坐标系
+        # ISO8855坐标系
         left_lane_line.append(
             [
                 float(vehicle_coord[0] - cam_locx),
@@ -160,15 +161,15 @@ def gather_lane_data(world, ego_vehicle, cam_locx=3.8, log=False):
             left_lane_wp, ego_transform, cam_locx=cam_locx, distance=100.0
         )
     else:
-        left_left_lane_line = None
-        left_right_lane_line = None
+        left_left_lane_line = []
+        left_right_lane_line = []
     if right_lane_wp is not None:
         right_left_lane_line, right_right_lane_line = get_forward_lane(
             right_lane_wp, ego_transform, cam_locx=cam_locx, distance=100.0
         )
     else:
-        right_left_lane_line = None
-        right_right_lane_line = None
+        right_left_lane_line = []
+        right_right_lane_line = []
     # img = draw_lane_data(forward_lane)
     # img = None
     lanes_data = [

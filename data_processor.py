@@ -8,7 +8,15 @@ import os
 import json
 import signal
 import sys
+from camera_geometry import CameraGeometry
 
+
+LANES_COLOR = [
+    (0, 0, 255),
+    (0, 255, 0),
+    (255, 0, 0),
+    (0, 255, 255),
+]
 
 DATA_DIR = "logs/"
 
@@ -66,8 +74,29 @@ def store_veh_motion_data(frame_id, veh_mot_info):
         )
 
 
-def store_lanes_data(frame_id, lanes_data):
-    data = {"frame_id": frame_id, "lanes_data": lanes_data}
+def get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h=720, img_w=1280):
+    lanes_data_2d_list = []
+    for lane in lanes_data:
+        lane_data_2d = []
+        if lane is None:
+            lanes_data_2d_list.append([])
+            continue
+        for point in lane:
+            u, v = cam_geo.roadXYZ_roadframe_iso8855_to_uv(point[0], point[1], point[2])
+            if u > 0 and u < img_w and v > 0 and v < img_h:
+                lane_data_2d.append([u, v])
+        lanes_data_2d_list.append(lane_data_2d)
+    return lanes_data_2d_list
+
+
+def store_lanes_data(cam_geo, frame_id, lanes_data, img_h=720, img_w=1280):
+    lanes_data_2d_list = get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h, img_w)
+
+    data = {
+        "frame_id": frame_id,
+        "lanes_3d": lanes_data,
+        "lanes_2d": lanes_data_2d_list,
+    }
     data_str = json.dumps(data)
     if not os.path.exists(LANES_DATA_FILE):
         with open(LANES_DATA_FILE, "w") as f:
@@ -77,6 +106,8 @@ def store_lanes_data(frame_id, lanes_data):
         with open(LANES_DATA_FILE, "a") as f:
             f.write(data_str)
             f.write("\n")
+
+    return lanes_data_2d_list
 
 
 def signal_handler(signum, frame):
@@ -93,23 +124,13 @@ def process_data(smd, lock):
     # 在程序退出时调用
     global data_processor_loop
 
-    signal.signal(signal.SIGUSR1, signal_handler)
-    print("SIGUSR1 signal handler registered")
-    # Read Config File
-    configfile = Path("config.yaml")
-    _config = YAML(typ="safe").load(configfile)
+    image_dir = DATA_DIR + "images/"
 
-    mirror_window_size = _config["sim"]["windows"]["mirror_res"]
-    dashcam_window_size = _config["sim"]["windows"]["dashcam_res"]
-    monitor = get_monitors()[0]
-    print(str(monitor))
+    if os.path.exists(image_dir):
+        os.system("rm -rf " + image_dir + "*")
 
-    no_img = np.zeros(
-        shape=[mirror_window_size[1], mirror_window_size[0], 3], dtype=np.uint8
-    )
-    dc_no_img = np.zeros(
-        shape=[dashcam_window_size[1], dashcam_window_size[0], 3], dtype=np.uint8
-    )
+    if not os.path.exists(image_dir):
+        os.makedirs(image_dir)
 
     if os.path.exists(VEH_MOTION_DATA_FILE):
         os.remove(VEH_MOTION_DATA_FILE)
@@ -118,34 +139,76 @@ def process_data(smd, lock):
 
     os.system("rm -rf " + DATA_DIR + "*.mp4")
 
+    signal.signal(signal.SIGUSR1, signal_handler)
+    print("SIGUSR1 signal handler registered")
+    # Read Config File
+    configfile = Path("config.yaml")
+    _config = YAML(typ="safe").load(configfile)
+
+    vehicle_tag = _config["carla"]["vehicle_tag"]
+
+    mirror_window_size = _config["sim"]["windows"]["mirror_res"]
+    dashcam_window_size = _config["sim"]["windows"]["dashcam_res"]
+    dashcam_locx = _config["sim"]["dashcam_location"][vehicle_tag][0]
+    dashcam_locy = _config["sim"]["dashcam_location"][vehicle_tag][1]
+    dashcam_locz = _config["sim"]["dashcam_location"][vehicle_tag][2]
+    dashcam_roll = _config["sim"]["dashcam_rotation"][0]
+    dashcam_pitch = _config["sim"]["dashcam_rotation"][1]
+    dashcam_yaw = _config["sim"]["dashcam_rotation"][2]
+    dashcam_fov = _config["sim"]["dashcam_fov"]
+
+    monitor = get_monitors()[0]
+    print(str(monitor))
+
+    cam_geo = CameraGeometry(
+        height=dashcam_locz,
+        yaw_deg=dashcam_yaw,
+        pitch_deg=dashcam_pitch,
+        roll_deg=dashcam_roll,
+        field_of_view_deg=dashcam_fov,
+        image_width=dashcam_window_size[0],
+        image_height=dashcam_window_size[1],
+    )
+
+    no_img = np.zeros(
+        shape=[mirror_window_size[1], mirror_window_size[0], 3], dtype=np.uint8
+    )
+    dc_no_img = np.zeros(
+        shape=[dashcam_window_size[1], dashcam_window_size[0], 3], dtype=np.uint8
+    )
+
     while data_processor_loop:
         # Left Mirror
         lock.acquire()
         if "left_mirror_view" in smd.keys():
             img = smd["left_mirror_view"]
         else:
-            img = no_img
+            # img = no_img
+            img = None
         lock.release()
-        cv2.imshow("left Mirror", img)
-        # cv2.moveWindow("left Mirror", monitor.x, monitor.y)
+        if img is not None:
+            cv2.imshow("left Mirror", img)
+            # cv2.moveWindow("left Mirror", monitor.x, monitor.y)
 
         # Right Mirror
         lock.acquire()
         if "right_mirror_view" in smd.keys():
             img = smd["right_mirror_view"]
         else:
-            img = no_img
+            # img = no_img
+            img = None
         lock.release()
-        cv2.imshow("Right Mirror", img)
-        # cv2.moveWindow("Right Mirror", (monitor.width-mirror_window_size[0]-10),monitor.y)
+        if img is not None:
+            cv2.imshow("Right Mirror", img)
+            # cv2.moveWindow("Right Mirror", (monitor.width-mirror_window_size[0]-10),monitor.y)
 
         # Dashcam
         lock.acquire()
         if "dashcam_view" in smd.keys():
-            img = smd["dashcam_view"]
+            dc_img = smd["dashcam_view"]
             fps = smd["fps"]
         else:
-            img = dc_no_img
+            dc_img = dc_no_img
             fps = -1
         if "frame_count" in smd.keys():
             frame_count = smd["frame_count"]
@@ -164,7 +227,7 @@ def process_data(smd, lock):
 
         lock.release()
         cv2.putText(
-            img,
+            dc_img,
             f"Fid: {frame_count} | {int(seconds)}s",
             (10, 30),
             cv2.FONT_HERSHEY_SIMPLEX,
@@ -173,7 +236,7 @@ def process_data(smd, lock):
             2,
         )
         cv2.putText(
-            img,
+            dc_img,
             f"Spd: {int(spd_kmh)} km/h | Wyaw: {round(yaw_velocity, 2)} deg/s",
             (10, 60),
             cv2.FONT_HERSHEY_SIMPLEX,
@@ -181,7 +244,23 @@ def process_data(smd, lock):
             (0, 0, 255),
             2,
         )
-        cv2.imshow("Dashcam", img)
+
+        lane_found = False
+        if "lanes_data" in smd.keys():
+            lanes_2d = get_2d_lanes_data(cam_geo, frame_count, smd["lanes_data"])
+            for i, lane_2d in enumerate(lanes_2d):
+                for point in lane_2d:
+                    cv2.circle(
+                        dc_img, (int(point[0]), int(point[1])), 2, LANES_COLOR[i], -1
+                    )
+                    lane_found = True
+        cv2.imshow("Dashcam", dc_img)
+        if frame_count % 3 == 0:
+            if not os.path.exists(image_dir):
+                os.makedirs(image_dir)
+            cv2.imwrite(image_dir + f"{frame_count}.jpg", dc_img)
+        if not lane_found:
+            print(f"No lane found, frame_id: {frame_count}")
 
         lock.acquire()
         if "data_fifo" in smd.keys():
@@ -195,7 +274,9 @@ def process_data(smd, lock):
                     store_veh_motion_data(
                         frame_data["frame_id"], frame_data["ego_veh_info"]
                     )
-                    store_lanes_data(frame_data["frame_id"], frame_data["lanes_data"])
+                    store_lanes_data(
+                        cam_geo, frame_data["frame_id"], frame_data["lanes_data"]
+                    )
                     save_video(frame_data["dashcam_img"], "dashcam", fps)
                 else:
                     print(
