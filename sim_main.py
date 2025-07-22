@@ -72,13 +72,16 @@ def set_ego_autopilot_args(vehicle, tm):
     # Disable auto lane change
     tm.auto_lane_change(vehicle, True)
     # Set random speed
-    percentage = random.randint(-50, 0)
-    tm.vehicle_percentage_speed_difference(vehicle, percentage)
+    #percentage = random.randint(-50, 0)
+    #tm.vehicle_percentage_speed_difference(vehicle, percentage)
+    tm.set_desired_speed(vehicle, 100)
     # Set keep right rule
     # tm.set_keep_right_rule(vehicle, True)
+    tm.random_left_lanechange_percentage(vehicle, 15)
+    tm.random_right_lanechange_percentage(vehicle, 15)
     # Ignore lights, signs and vehicles
-    tm.ignore_lights_percentage(vehicle, 50)  # 忽略红绿灯
-    tm.ignore_signs_percentage(vehicle, 50)  # 忽略交通标志
+    tm.ignore_lights_percentage(vehicle, 0)  # 忽略红绿灯
+    tm.ignore_signs_percentage(vehicle, 10)  # 忽略交通标志
     tm.ignore_vehicles_percentage(vehicle, 0)  # 忽略其他车辆
 
 
@@ -496,22 +499,24 @@ class Simulator(object):
             # sleep_time(start_time, end_time, 0.05)
             if fid % 20 == 0:
                 print(
-                    f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms"
+                    f"Frame ID: {fid}, loop time: {round(end_time - start_time, 2) * 1000}ms; total frames: {fid - first_fid}"
                 )
-            if self.config.real_time_mode:
+            if True:
                 expected_tm = first_start_tm + (
                     (fid - first_fid) * self.config.fixed_delta_seconds
                 )
                 # clock.tick(10)
-                clock.tick_busy_loop(self.config.fps)
+                
+                if self.config.real_time_mode:
+                    clock.tick_busy_loop(self.config.fps)
                 this_tm = time.time()
                 if first_start_tm == 0:
                     first_start_tm = this_tm
                     first_fid = fid
-                else:
+                if self.config.real_time_mode:
                     if fid % 20 == 0:
                         print(
-                            f"  Expected time: {expected_tm}, current time: {this_tm}, offset: {int((this_tm - expected_tm) * 1000)}ms"
+                            f"  Expected time: {expected_tm}, current time: {this_tm}, offset: {int((this_tm - expected_tm) * 1000)}ms;"
                         )
 
         print("Shutting Down...")
@@ -558,11 +563,11 @@ def main():
     data_process.start()
 
     main_process.join()
-    print("Main process joined")
+    print("Main process end, wait for 3 seconds to send signal to the other processes")
 
-    target_pid = data_process.pid
-
+    time.sleep(3)
     # 发送信号给指定进程
+    target_pid = data_process.pid
     os.kill(target_pid, signal.SIGUSR1)
     data_process.join()
 

@@ -348,6 +348,9 @@ def main():
         # Example of how to use Traffic Manager parameters
         traffic_manager.global_percentage_speed_difference(30.0)
 
+        traffic_manager.set_respawn_dormant_vehicles(mode_switch=True)
+
+
         while True:
             if not args.asynch and synchronous_master:
                 world.tick()
