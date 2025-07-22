@@ -11,6 +11,9 @@ carla:
   steering_dead_zone: 0.1   # 0.001 for fanatec
   fps: 10
 
+recorder:
+  save_debug_images: False
+
 sim:
   default_control: 'xboxone'
   windows:

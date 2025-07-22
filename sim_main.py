@@ -20,8 +20,10 @@ from carla_gather_lane import gather_lane_data
 from data_processor import process_data, DATA_DIR, data_processor_loop
 
 
+MB = 1000 * 1000
+
 config = Config()
-smd = SharedMemoryDict(name="tokens", size=10000000)
+smd = SharedMemoryDict(name="tokens", size=20 * MB)
 lock = Lock()
 
 
@@ -250,13 +252,9 @@ class Simulator(object):
         world = client.get_world()
         self.original_settings = world.get_settings()
 
-        # weather
-        weather = world.get_weather()
-        weather.sun_azimuth_angle = 344
-        weather.sun_altitude_angle = 45
-        weather.precipitation = 0
-        weather.precipitation_deposits = 0  # puddles
-        world.set_weather(weather)
+        # Weather Presets:ClearNoon, CloudyNoon, WetNoon, WetCloudyNoon, SoftRainNoon, MidRainyNoon, HardRainNoon,
+        #  ClearSunset, CloudySunset, WetSunset, WetCloudySunset, SoftRainSunset, MidRainSunset, HardRainSunset.
+        world.set_weather(carla.WeatherParameters.ClearNoon)
 
         # Set up the simulator in synchronous mode
         settings = world.get_settings()
@@ -459,12 +457,14 @@ class Simulator(object):
             }
             if "dashcam_view" in self.smd.keys():
                 frame_data["dashcam_img"] = self.smd["dashcam_view"]
-                # TODO: this block should be locked
+                # this block should be locked
                 self.lock.acquire()
                 data_fifo = self.smd["data_fifo"]
                 data_fifo.append(frame_data)
                 self.smd["data_fifo"] = data_fifo
                 self.lock.release()
+                if fid % 20 == 0:
+                    print(f"Data fifo length: {len(data_fifo)}")
             else:
                 print("!!!! No dashcam image found, ignore this frame, frame_id: ", fid)
 

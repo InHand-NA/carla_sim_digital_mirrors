@@ -10,6 +10,7 @@ import signal
 import sys
 from camera_geometry import CameraGeometry
 
+MB = 1000 * 1000
 
 LANES_COLOR = [
     (0, 0, 255),
@@ -156,6 +157,7 @@ def process_data(smd, lock):
     dashcam_pitch = _config["sim"]["dashcam_rotation"][1]
     dashcam_yaw = _config["sim"]["dashcam_rotation"][2]
     dashcam_fov = _config["sim"]["dashcam_fov"]
+    save_debug_images = _config["recorder"]["save_debug_images"]
 
     monitor = get_monitors()[0]
     print(str(monitor))
@@ -247,7 +249,9 @@ def process_data(smd, lock):
 
         lane_found = False
         if "lanes_data" in smd.keys():
+            lock.acquire()
             lanes_2d = get_2d_lanes_data(cam_geo, frame_count, smd["lanes_data"])
+            lock.release()
             for i, lane_2d in enumerate(lanes_2d):
                 for point in lane_2d:
                     cv2.circle(
@@ -255,7 +259,7 @@ def process_data(smd, lock):
                     )
                     lane_found = True
         cv2.imshow("Dashcam", dc_img)
-        if frame_count % 3 == 0:
+        if frame_count % 3 == 0 and save_debug_images:
             if not os.path.exists(image_dir):
                 os.makedirs(image_dir)
             cv2.imwrite(image_dir + f"{frame_count}.jpg", dc_img)
@@ -265,9 +269,9 @@ def process_data(smd, lock):
         lock.acquire()
         if "data_fifo" in smd.keys():
             data_fifo = smd["data_fifo"]
-            while len(data_fifo) > 0:
-                # print(f"Processing frame {data_fifo[0]['frame_id']}")
-                # TODO: this block should be locked
+            while len(data_fifo)  > 0:
+                if len(data_fifo) > 1:
+                    print(f"!!!!!Data fifo length: {len(data_fifo)}")
                 frame_data = data_fifo.pop(0)
                 smd["data_fifo"] = data_fifo  # update the db
                 if "dashcam_img" in frame_data.keys():

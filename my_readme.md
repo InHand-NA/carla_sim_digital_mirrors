@@ -25,6 +25,18 @@ sudo docker run --rm -it \
       mycarla:0.9.15_maps /bin/bash ./CarlaUE4.sh -RenderOffScreen -carla-rpc-port=2000 -quality-level=Epic
 ```
 
+```
+sudo docker run --rm -it \
+     --privileged --gpus all --net=host  \
+     -e DISPLAY=$DISPLAY \
+     --device /dev/snd:/dev/snd  \
+     --group-add audio \
+     -v /etc/asound.conf:/etc/asound.conf:ro \
+     -v /data/carla_sim_digital_mirrors/CarlaSettings.ini:/etc/CarlaSettings.ini:ro \
+     --name carla_server \
+      mycarla:0.9.15_maps /bin/bash ./CarlaUE4.sh -RenderOffScreen -carla-rpc-port=2000 -carla-settings="/etc/CarlaSettings.ini" -quality-level=Epic
+```
+
 
 ```
 VENV_PATH=.venv
