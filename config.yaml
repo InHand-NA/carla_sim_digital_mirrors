@@ -9,12 +9,12 @@ carla:
   vehicle_tag: 'firetruck'
   #vehicle_tag: 'wrangler_rubicon'
   steering_dead_zone: 0.1   # 0.001 for fanatec
-  fps: 10
+  fps: 50
   weather_preset: 'ClearSunset'
 
 recorder:
   save_debug_images: False
-  task_name: '20250723_003'
+  task_name: '20250723_009'
 
 
 sim:
@@ -24,10 +24,10 @@ sim:
     mirror_res: [640,480]
     dashcam_res: [1280,720]
 
-  sim_frames: 200
+  sim_seconds: 30
   # Make sure the time is similar to real time for a better experience of driving
   enable_mirror_view: False
-  real_time_mode: False
+  real_time_mode: True
   god_view_mode: True
   # Note: different vehicles have different mirror locations, add new locations below
   god_view_location: 

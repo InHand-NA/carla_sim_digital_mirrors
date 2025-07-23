@@ -112,9 +112,9 @@ def get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h=720, img_w=1280):
     return lanes_data_2d_list
 
 
-def store_lanes_data(cam_geo, frame_id, lanes_data, task_name: str, img_h=720, img_w=1280):
-    lanes_data_2d_list = get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h, img_w)
-
+def store_lanes_data(cam_geo, frame_id, lanes_data, lanes_data_2d, task_name: str, img_h=720, img_w=1280):
+    #lanes_data_2d_list = get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h, img_w)
+    lanes_data_2d_list = lanes_data_2d
     data = {
         "frame_id": frame_id,
         "lanes_3d": lanes_data,
@@ -220,6 +220,8 @@ def process_data(smd, lock):
         shape=[dashcam_window_size[1], dashcam_window_size[0], 3], dtype=np.uint8
     )
 
+    last_frame_id = -1
+
     while data_processor_loop:
         # Left Mirror
         lock.acquire()
@@ -257,6 +259,7 @@ def process_data(smd, lock):
             frame_count = smd["frame_count"]
             seconds = smd["seconds"]
         else:
+            print(f"!!!! data_processor: No frame_count in smd")
             frame_count = -1
             seconds = -1
 
@@ -291,7 +294,8 @@ def process_data(smd, lock):
         lane_found = False
         if "lanes_data" in smd.keys():
             lock.acquire()
-            lanes_2d = get_2d_lanes_data(cam_geo, frame_count, smd["lanes_data"])
+            #lanes_2d = get_2d_lanes_data(cam_geo, frame_count, smd["lanes_data"])
+            lanes_2d = smd["lanes_data_2d"]
             lock.release()
             for i, lane_2d in enumerate(lanes_2d):
                 for point in lane_2d:
@@ -299,8 +303,9 @@ def process_data(smd, lock):
                         dc_img, (int(point[0]), int(point[1])), 2, LANES_COLOR[i], -1
                     )
                     lane_found = True
+
         cv2.imshow("Dashcam", dc_img)
-        if frame_count % 3 == 0 and save_debug_images:
+        if frame_count % 1 == 0 and save_debug_images:
             data_dir = get_data_dir(task_name)
             image_dir = os.path.join(data_dir, "images")
             if not os.path.exists(image_dir):
@@ -314,17 +319,22 @@ def process_data(smd, lock):
             data_fifo = smd["data_fifo"]
             while len(data_fifo)  > 0:
                 if len(data_fifo) > 1:
-                    print(f"!!!!!Data fifo length: {len(data_fifo)}")
+                    #print(f"Data fifo length: {len(data_fifo)}")
+                    pass
                 frame_data = data_fifo.pop(0)
                 smd["data_fifo"] = data_fifo  # update the db
+                frame_id = frame_data["frame_id"]
+                if last_frame_id > 0 and frame_id - last_frame_id > 1:
+                    print(f"!!!! data_processor: Frame id gap: {frame_id - last_frame_id}")
                 if "dashcam_img" in frame_data.keys():
                     store_veh_motion_data(
                         frame_data["frame_id"], frame_data["ego_veh_info"], task_name
                     )
                     store_lanes_data(
-                        cam_geo, frame_data["frame_id"], frame_data["lanes_data"], task_name
+                        cam_geo, frame_data["frame_id"], frame_data["lanes_data"], frame_data["lanes_data_2d"], task_name
                     )
                     save_video(frame_data["dashcam_img"], "dashcam", fps, task_name)
+                    last_frame_id = frame_id
                 else:
                     print(
                         "!!!! No dashcam image found, ignore this frame, frame_id: ",

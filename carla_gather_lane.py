@@ -33,6 +33,97 @@ def coor_world_to_vehicle(ego_transform, world_location):
     return vehicle_coord
 
 
+def build_projection_matrix(w, h, fov):
+    focal = w / (2.0 * np.tan(fov * np.pi / 360.0))
+    K = np.identity(3)
+    K[0, 0] = K[1, 1] = focal
+    K[0, 2] = w / 2.0
+    K[1, 2] = h / 2.0
+    return K
+
+
+def get_image_point(world_location, world_2_camera, K):
+    # Calculate 2D projection of bone coordinate
+
+    # get the world location of the bone root
+    ext_world_location = np.array(
+        [world_location.x, world_location.y, world_location.z, 1.0]
+    )
+    # transform to camera coordinates
+    point_camera = np.dot(world_2_camera, ext_world_location)
+
+    # New we must change from UE4's coordinate system to an "standard"
+    # (x, y ,z) -> (y, -z, x)
+    # and we remove the fourth component also
+    point_camera = [point_camera[1], -point_camera[2], point_camera[0]]
+    # point_camera = point_camera[:3]
+    if point_camera[2] <= 0:
+        return None
+
+    # now project 3D->2D using the camera matrix
+    point_img = np.dot(K, point_camera)
+    # normalize
+    point_img[0] /= point_img[2]
+    point_img[1] /= point_img[2]
+
+    # print(f"world_location: {world_location} => image point: {point_img}")
+    return int(round(point_img[0])), int(round(point_img[1]))
+
+
+def get_forward_lane_2d(waypoint, world_2_camera, K, img_w, img_h, distance=100):
+    """
+    Get the forward lane of the ego vehicle
+    """
+    step = 1.0
+    count = 10
+    left_lane_line_2d = []
+    right_lane_line_2d = []
+    if count == 0:
+        current = waypoint
+    else:
+        current = waypoint.next(count)[0]  # debug:
+    while current and count < distance:
+        lane_width = current.lane_width  # 单位为 meter
+
+        # 获取左侧和右侧车道线中心的位置（以当前 waypoint 为基准）
+        left_marking_location = (
+            current.transform.location
+            + current.transform.get_right_vector() * (-lane_width / 2.0)
+        )
+        right_marking_location = (
+            current.transform.location
+            + current.transform.get_right_vector() * (lane_width / 2.0)
+        )
+
+        left_point = get_image_point(left_marking_location, world_2_camera, K)
+        right_point = get_image_point(right_marking_location, world_2_camera, K)
+        # left_point = world_to_pixel(left_marking_location, camera_transform, K)
+        # right_point = world_to_pixel(right_marking_location, camera_transform, K)
+        if (
+            left_point is not None
+            and left_point[0] > 0
+            and left_point[0] < img_w
+            and left_point[1] > 0
+            and left_point[1] < img_h
+        ):
+            left_lane_line_2d.append(left_point)
+        if (
+            right_point is not None
+            and right_point[0] > 0
+            and right_point[0] < img_w
+            and right_point[1] > 0
+            and right_point[1] < img_h
+        ):
+            right_lane_line_2d.append(right_point)
+
+        next_list = current.next(step)
+        if not next_list:
+            break
+        current = next_list[0]
+        count += step
+    return left_lane_line_2d, right_lane_line_2d
+
+
 def get_forward_lane(waypoint, ego_transform, cam_locx=3.8, distance=100):
     """
     Get the forward lane of the ego vehicle
@@ -43,7 +134,7 @@ def get_forward_lane(waypoint, ego_transform, cam_locx=3.8, distance=100):
     left_lane_line = []
     right_lane_line = []
     current = waypoint
-    #while current and not current.is_junction and count < distance:
+    # while current and not current.is_junction and count < distance:
     while current and count < distance:
         x, y, z = (
             current.transform.location.x,
@@ -131,7 +222,7 @@ def draw_lane_data(lane_data):
     return img
 
 
-def gather_lane_data(world, ego_vehicle, cam_locx=3.8, log=False):
+def gather_lane_data(world, ego_vehicle, cam_locx=3.8, camera=None, log=False):
     """
     Gather lane data for the ego vehicle
     """
@@ -141,6 +232,7 @@ def gather_lane_data(world, ego_vehicle, cam_locx=3.8, log=False):
     waypoint = map.get_waypoint(
         veh_location, project_to_road=True, lane_type=carla.LaneType.Driving
     )
+
     # present lane data
     lane_id = waypoint.lane_id
     lane_type = waypoint.lane_type
@@ -156,6 +248,7 @@ def gather_lane_data(world, ego_vehicle, cam_locx=3.8, log=False):
     left_lane_line, right_lane_line = get_forward_lane(
         waypoint, ego_transform, cam_locx=cam_locx, distance=100.0
     )
+
     if left_lane_wp is not None:
         left_left_lane_line, left_right_lane_line = get_forward_lane(
             left_lane_wp, ego_transform, cam_locx=cam_locx, distance=100.0
@@ -181,3 +274,44 @@ def gather_lane_data(world, ego_vehicle, cam_locx=3.8, log=False):
     if log:
         print_lanes_data(lanes_data)
     return lanes_data
+
+
+def gather_lane_data_2d(ego_vehicle, world, camera, img_h, img_w, fov, log=False):
+    """
+    Gather lane data for the ego vehicle
+    """
+    K = build_projection_matrix(img_w, img_h, fov)
+    world_2_camera = np.array(camera.get_transform().get_inverse_matrix())
+    veh_location = ego_vehicle.get_location()
+    map = world.get_map()
+    waypoint = map.get_waypoint(
+        veh_location, project_to_road=True, lane_type=carla.LaneType.Driving
+    )
+    left_lane_line_2d, right_lane_line_2d = get_forward_lane_2d(
+        waypoint, world_2_camera, K, img_w, img_h, distance=100.0
+    )
+
+    left_lane_wp = waypoint.get_left_lane()
+    right_lane_wp = waypoint.get_right_lane()
+    if left_lane_wp is not None:
+        left_left_lane_line_2d, left_right_lane_line_2d = get_forward_lane_2d(
+            left_lane_wp, world_2_camera, K, img_w, img_h, distance=100.0
+        )
+    else:
+        left_left_lane_line_2d = []
+        left_right_lane_line_2d = []
+    if right_lane_wp is not None:
+        right_left_lane_line_2d, right_right_lane_line_2d = get_forward_lane_2d(
+            right_lane_wp, world_2_camera, K, img_w, img_h, distance=100.0
+        )
+    else:
+        right_left_lane_line_2d = []
+        right_right_lane_line_2d = []
+
+    lanes_data_2d = [
+        left_left_lane_line_2d,
+        left_lane_line_2d,
+        right_lane_line_2d,
+        right_right_lane_line_2d,
+    ]
+    return lanes_data_2d

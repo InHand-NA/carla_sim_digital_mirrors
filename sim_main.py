@@ -16,7 +16,7 @@ import signal
 
 from config import Config, mirror_parameters
 from carla_gather_vehicle_data import get_vehicle_info
-from carla_gather_lane import gather_lane_data
+from carla_gather_lane import gather_lane_data, gather_lane_data_2d
 from data_processor import process_data, DATA_DIR, data_processor_loop
 
 
@@ -399,6 +399,7 @@ class Simulator(object):
         dc_sensor = world.spawn_actor(
             dashcam_blueprint, dashcam_transform, attach_to=self.ego_vehicle
         )
+        self.dc_sensor = dc_sensor
         if config.enable_mirror_view:
             lmv_sensor = world.spawn_actor(
                 mirror_blueprint, left_mirror_transform, attach_to=self.ego_vehicle
@@ -466,34 +467,52 @@ class Simulator(object):
             self.config.recorder_task_name,
         )
 
+        settings = self.world.get_settings()
+        print(f"settings.substepping: {settings.substepping}")
+        print(f"settings.max_substep_delta_time: {settings.max_substep_delta_time}")
+        print(f"settings.max_substeps: {settings.max_substeps}")
+        fixed_delta_seconds = settings.fixed_delta_seconds
+        if fixed_delta_seconds >= (settings.max_substep_delta_time * settings.max_substeps - 0.01):
+            print(f"Warning: substepping args are not good with fixed_delta_seconds: {fixed_delta_seconds}!!!!!!!")
+        #self.world.apply_settings(settings)
+
     def run_sim(self):
         # Game loop
         crashed = False
         clock = pygame.time.Clock()
         first_start_tm = 0
         first_fid = 0
+        last_fid = -1
         print("Running simulation")
         while not crashed:
             start_time = time.time()
             # Advance the simulation time
             fid = self.world.tick()
+            if last_fid > 0 and fid - last_fid > 1:
+                print(f"!!!! sim_main: Frame id gap: {fid - last_fid}")
+            last_fid = fid
             lock.acquire()
             self.smd["frame_count"] = fid
             seconds = fid / self.config.fps
             self.smd["seconds"] = seconds
             self.smd["fps"] = self.config.fps
-            lock.release()
             ego_vehicle_info = get_vehicle_info(self.ego_vehicle, cal_spd=True)
-            lock.acquire()
             self.smd["ego_veh_info"] = ego_vehicle_info
-            lanes_data = gather_lane_data(self.world, self.ego_vehicle, self.cam_locx)
+            lanes_data = gather_lane_data(self.world, self.ego_vehicle, self.cam_locx, self.dc_sensor)
             self.smd["lanes_data"] = lanes_data
+            #lanes_data_2d = get_2d_lanes_data(lanes_data, self.ego_vehicle.get_transform(), self.config.dashcam_res[1], self.config.dashcam_res[0], self.config.dashcam_fov)
+            #lanes_data_2d = gather_lane_data_2d(self.ego_vehicle, self.world, self.dc_sensor, self.config.dashcam_res[1], self.config.dashcam_res[0], self.config.dashcam_fov)
+            #print(f"dashcam location: {self.dc_sensor.get_transform().location}")
+            #print(f"dashcam rotation: {self.dc_sensor.get_transform().rotation}")
+            lanes_data_2d = gather_lane_data_2d(self.ego_vehicle, self.world, self.dc_sensor, self.config.dashcam_res[1], self.config.dashcam_res[0], self.config.dashcam_fov)
+            self.smd["lanes_data_2d"] = lanes_data_2d
             lock.release()
             # push data of current frame to fifo
             frame_data = {
                 "frame_id": fid,
                 "ego_veh_info": ego_vehicle_info,
                 "lanes_data": lanes_data,
+                "lanes_data_2d": lanes_data_2d,
             }
             if "dashcam_view" in self.smd.keys():
                 frame_data["dashcam_img"] = self.smd["dashcam_view"]
@@ -503,8 +522,8 @@ class Simulator(object):
                 data_fifo.append(frame_data)
                 self.smd["data_fifo"] = data_fifo
                 self.lock.release()
-                if fid % 20 == 0:
-                    print(f"Data fifo length: {len(data_fifo)}")
+                #if fid % 20 == 0:
+                    #print(f"Data fifo length: {len(data_fifo)}")
             else:
                 print("!!!! No dashcam image found, ignore this frame, frame_id: ", fid)
 
@@ -546,6 +565,7 @@ class Simulator(object):
                 
                 if self.config.real_time_mode:
                     clock.tick_busy_loop(self.config.fps)
+                #clock.tick_busy_loop(10)
                 this_tm = time.time()
                 if first_start_tm == 0 and "dashcam_view" in self.smd.keys():
                     first_start_tm = this_tm
@@ -556,6 +576,7 @@ class Simulator(object):
                             f"  Expected time: {expected_tm}, current time: {this_tm}, offset: {int((this_tm - expected_tm) * 1000)}ms;"
                         )
 
+            
             if first_fid > 0 and self.config.sim_frames > 0 and fid >= (self.config.sim_frames + first_fid):
                 crashed = True
                 print(f"Sim frames: {fid - first_fid}, expected frames: {self.config.sim_frames}; Exit the loop")
