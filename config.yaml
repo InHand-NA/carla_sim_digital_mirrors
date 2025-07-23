@@ -10,6 +10,7 @@ carla:
   #vehicle_tag: 'wrangler_rubicon'
   steering_dead_zone: 0.1   # 0.001 for fanatec
   fps: 10
+  weather_preset: 'WetCloudySunset'
 
 recorder:
   save_debug_images: False

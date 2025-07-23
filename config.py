@@ -28,6 +28,7 @@ class Config(object):
         self.steering_dead_zone = float(self.config["carla"]["steering_dead_zone"])
         self.fps = int(self.config["carla"]["fps"])
         self.fixed_delta_seconds = 1.0 / self.fps
+        self.weather_preset = self.config["carla"]["weather_preset"]
 
         # sim config
         self.default_control = self.config["sim"]["default_control"]

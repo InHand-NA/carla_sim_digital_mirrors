@@ -213,6 +213,28 @@ def save_metadata(
         json.dump(metadata, f)
 
 
+def get_weather_preset(weather_preset_name: str):
+    weather_presets = {
+        "ClearNoon": carla.WeatherParameters.ClearNoon,
+        "CloudyNoon": carla.WeatherParameters.CloudyNoon,
+        "WetNoon": carla.WeatherParameters.WetNoon,
+        "WetCloudyNoon": carla.WeatherParameters.WetCloudyNoon,
+        "SoftRainNoon": carla.WeatherParameters.SoftRainNoon,
+        "MidRainyNoon": carla.WeatherParameters.MidRainyNoon,
+        "HardRainNoon": carla.WeatherParameters.HardRainNoon,
+        "ClearSunset": carla.WeatherParameters.ClearSunset,
+        "CloudySunset": carla.WeatherParameters.CloudySunset,
+        "WetSunset": carla.WeatherParameters.WetSunset,
+        "WetCloudySunset": carla.WeatherParameters.WetCloudySunset,
+        "SoftRainSunset": carla.WeatherParameters.SoftRainSunset,
+        "MidRainSunset": carla.WeatherParameters.MidRainSunset,
+        "HardRainSunset": carla.WeatherParameters.HardRainSunset,
+    }
+    if weather_preset_name not in weather_presets:
+        raise ValueError(f"Invalid weather preset name: {weather_preset_name}")
+    return weather_presets[weather_preset_name]
+
+
 class Simulator(object):
     def __init__(self, config: Config, smd: SharedMemoryDict, lock: Lock):
         self.config = config
@@ -257,7 +279,7 @@ class Simulator(object):
 
         # Weather Presets:ClearNoon, CloudyNoon, WetNoon, WetCloudyNoon, SoftRainNoon, MidRainyNoon, HardRainNoon,
         #  ClearSunset, CloudySunset, WetSunset, WetCloudySunset, SoftRainSunset, MidRainSunset, HardRainSunset.
-        world.set_weather(carla.WeatherParameters.ClearNoon)
+        world.set_weather(get_weather_preset(config.weather_preset))
 
         # Set up the simulator in synchronous mode
         settings = world.get_settings()
