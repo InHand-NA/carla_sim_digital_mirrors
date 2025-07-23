@@ -79,13 +79,24 @@ def get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h=720, img_w=1280):
     lanes_data_2d_list = []
     for lane in lanes_data:
         lane_data_2d = []
+        v_min = img_h
+        v_list = []
+
         if lane is None:
             lanes_data_2d_list.append([])
             continue
         for point in lane:
             u, v = cam_geo.roadXYZ_roadframe_iso8855_to_uv(point[0], point[1], point[2])
             if u > 0 and u < img_w and v > 0 and v < img_h:
+                u = int(round(u))
+                v = int(round(v))
+                if v in v_list:
+                    continue
+                if v > v_min:
+                    continue
                 lane_data_2d.append([u, v])
+                v_list.append(v)
+                v_min = min(v_min, v)
         lanes_data_2d_list.append(lane_data_2d)
     return lanes_data_2d_list
 
