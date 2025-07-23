@@ -37,6 +37,7 @@ class Config(object):
         # sim config
         self.default_control = self.config["sim"]["default_control"]
         self.windows = self.config["sim"]["windows"]
+        self.sim_frames = int(self.config["sim"]["sim_frames"])
         self.enable_mirror_view = self.config["sim"]["enable_mirror_view"]
         self.front_window_res = self.config["sim"]["windows"]["front_res"]
         self.rear_window_res = self.config["sim"]["windows"]["mirror_res"]

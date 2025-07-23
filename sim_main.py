@@ -545,7 +545,7 @@ class Simulator(object):
                 if self.config.real_time_mode:
                     clock.tick_busy_loop(self.config.fps)
                 this_tm = time.time()
-                if first_start_tm == 0:
+                if first_start_tm == 0 and "dashcam_view" in self.smd.keys():
                     first_start_tm = this_tm
                     first_fid = fid
                 if self.config.real_time_mode:
@@ -553,6 +553,10 @@ class Simulator(object):
                         print(
                             f"  Expected time: {expected_tm}, current time: {this_tm}, offset: {int((this_tm - expected_tm) * 1000)}ms;"
                         )
+
+            if first_fid > 0 and self.config.sim_frames > 0 and fid >= (self.config.sim_frames + first_fid):
+                crashed = True
+                print(f"Sim frames: {fid - first_fid}, expected frames: {self.config.sim_frames}; Exit the loop")
 
         print("Shutting Down...")
         self.stop_sensors(self.sensors_list)

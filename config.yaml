@@ -16,6 +16,7 @@ recorder:
   save_debug_images: False
   task_name: '20250723_002'
 
+
 sim:
   default_control: 'xboxone'
   windows:
@@ -23,6 +24,7 @@ sim:
     mirror_res: [640,480]
     dashcam_res: [1280,720]
 
+  sim_frames: 1000
   # Make sure the time is similar to real time for a better experience of driving
   enable_mirror_view: False
   real_time_mode: True

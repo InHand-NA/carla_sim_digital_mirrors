@@ -301,9 +301,11 @@ def process_data(smd, lock):
                     lane_found = True
         cv2.imshow("Dashcam", dc_img)
         if frame_count % 3 == 0 and save_debug_images:
+            data_dir = get_data_dir(task_name)
+            image_dir = os.path.join(data_dir, "images")
             if not os.path.exists(image_dir):
                 os.makedirs(image_dir)
-            cv2.imwrite(image_dir + f"{frame_count}.jpg", dc_img)
+            cv2.imwrite(os.path.join(image_dir, f"{frame_count}.jpg"), dc_img)
         if not lane_found:
             print(f"No lane found, frame_id: {frame_count}")
 
