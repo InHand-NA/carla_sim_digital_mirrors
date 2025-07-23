@@ -30,6 +30,10 @@ class Config(object):
         self.fixed_delta_seconds = 1.0 / self.fps
         self.weather_preset = self.config["carla"]["weather_preset"]
 
+        # recorder config
+        self.recorder_save_debug_images = self.config["recorder"]["save_debug_images"]
+        self.recorder_task_name = self.config["recorder"]["task_name"]
+
         # sim config
         self.default_control = self.config["sim"]["default_control"]
         self.windows = self.config["sim"]["windows"]

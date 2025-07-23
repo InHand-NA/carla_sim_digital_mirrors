@@ -14,6 +14,7 @@ carla:
 
 recorder:
   save_debug_images: False
+  task_name: '20250723_002'
 
 sim:
   default_control: 'xboxone'

@@ -188,6 +188,8 @@ def get_vehicle_metadata(vehicle):
 
 
 def save_metadata(
+    map_name,
+    weather_preset_name,
     vehicle,
     dashcam_height,
     dashcam_width,
@@ -195,10 +197,13 @@ def save_metadata(
     dashcam_location,
     dashcam_rotation,
     fps,
+    task_name,
 ):
     veh_meta = get_vehicle_metadata(vehicle)
 
     metadata = {
+        "map_name": map_name,
+        "weather_preset_name": weather_preset_name,
         "vehicle": veh_meta,
         "dashcam": {
             "height": dashcam_height,
@@ -209,7 +214,12 @@ def save_metadata(
             "fps": fps,
         },
     }
-    with open(DATA_DIR + "metadata.json", "w") as f:
+    metadata_file = os.path.join(DATA_DIR, f"{task_name}", "metadata.json")
+    task_dir = os.path.dirname(metadata_file)
+    if not os.path.exists(task_dir):
+        os.makedirs(task_dir)
+
+    with open(metadata_file, "w") as f:
         json.dump(metadata, f)
 
 
@@ -442,6 +452,8 @@ class Simulator(object):
         self.cam_locx = config.dashcam_location[vehicle_tag][0]
 
         save_metadata(
+            config.world,
+            config.weather_preset,
             self.ego_vehicle,
             config.dashcam_res[1],
             config.dashcam_res[0],
@@ -449,6 +461,7 @@ class Simulator(object):
             config.dashcam_location[vehicle_tag],
             config.dashcam_rotation,
             self.config.fps,
+            self.config.recorder_task_name,
         )
 
     def run_sim(self):

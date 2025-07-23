@@ -33,14 +33,23 @@ video_writers = {}
 frame_count = 0
 
 
-def save_video(img, view_id, fps):
+def get_data_dir(task_name: str):
+    data_dir = os.path.join(DATA_DIR, task_name)
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    return data_dir
+
+
+def save_video(img, view_id, fps, task_name: str):
     global video_writers
     global frame_count
+
+    data_dir = get_data_dir(task_name)
 
     # 为每个 view_id 创建独立的视频写入器
     if view_id not in video_writers:
         video_writers[view_id] = cv2.VideoWriter(
-            DATA_DIR + f"{view_id}.mp4",
+            os.path.join(data_dir, f"{view_id}.mp4"),
             cv2.VideoWriter_fourcc(*"mp4v"),
             fps,
             (img.shape[1], img.shape[0]),
@@ -58,13 +67,15 @@ def close_all_videos():
     video_writers.clear()
 
 
-def store_veh_motion_data(frame_id, veh_mot_info):
-    if not os.path.exists(VEH_MOTION_DATA_FILE):
-        with open(VEH_MOTION_DATA_FILE, "w") as f:
+def store_veh_motion_data(frame_id, veh_mot_info, task_name: str):
+    data_dir = get_data_dir(task_name)
+    veh_motion_data_file = os.path.join(data_dir, "veh_motion_data.csv")
+    if not os.path.exists(veh_motion_data_file):
+        with open(veh_motion_data_file, "w") as f:
             f.write(
                 "frame_id, locx, locy, locz, vx, vy, vz, accx, accy, accz, angvelx, angvely, angvelz, spd_kmh\n"
             )
-    with open(VEH_MOTION_DATA_FILE, "a") as f:
+    with open(veh_motion_data_file, "a") as f:
         f.write(
             f"""{frame_id},"""
             f"""{veh_mot_info["location"][0]},{veh_mot_info["location"][1]},{veh_mot_info["location"][2]},"""
@@ -101,7 +112,7 @@ def get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h=720, img_w=1280):
     return lanes_data_2d_list
 
 
-def store_lanes_data(cam_geo, frame_id, lanes_data, img_h=720, img_w=1280):
+def store_lanes_data(cam_geo, frame_id, lanes_data, task_name: str, img_h=720, img_w=1280):
     lanes_data_2d_list = get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h, img_w)
 
     data = {
@@ -110,12 +121,16 @@ def store_lanes_data(cam_geo, frame_id, lanes_data, img_h=720, img_w=1280):
         "lanes_2d": lanes_data_2d_list,
     }
     data_str = json.dumps(data)
-    if not os.path.exists(LANES_DATA_FILE):
-        with open(LANES_DATA_FILE, "w") as f:
+
+    data_dir = get_data_dir(task_name)
+    lanes_data_file = os.path.join(data_dir, "lanes_data.json")
+
+    if not os.path.exists(lanes_data_file):
+        with open(lanes_data_file, "w") as f:
             f.write(data_str)
             f.write("\n")
     else:
-        with open(LANES_DATA_FILE, "a") as f:
+        with open(lanes_data_file, "a") as f:
             f.write(data_str)
             f.write("\n")
 
@@ -132,24 +147,36 @@ def signal_handler(signum, frame):
     pass
 
 
+def init_data_dir(task_name: str):
+    data_dir = get_data_dir(task_name)
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+
+    # rm *.mp4
+    cmd = f"rm -rf {data_dir}/*.mp4"
+    os.system(cmd)
+    # rm images/
+    cmd = f"rm -rf {data_dir}/images"
+    os.system(cmd)
+    # rm veh_motion_data.csv
+    cmd = f"rm -rf {data_dir}/veh_motion_data.csv"
+    os.system(cmd)
+    # rm lanes_data.json
+    cmd = f"rm -rf {data_dir}/lanes_data.json"
+    os.system(cmd)
+
+    # create images/
+    os.makedirs(os.path.join(data_dir, "images"))
+        
+    if not os.path.exists(os.path.join(data_dir, "veh_motion_data.csv")):
+        with open(os.path.join(data_dir, "veh_motion_data.csv"), "w") as f:
+            f.write("frame_id, locx, locy, locz, vx, vy, vz, accx, accy, accz, angvelx, angvely, angvelz, spd_kmh\n")
+
+    return data_dir
+
 def process_data(smd, lock):
     # 在程序退出时调用
     global data_processor_loop
-
-    image_dir = DATA_DIR + "images/"
-
-    if os.path.exists(image_dir):
-        os.system("rm -rf " + image_dir + "*")
-
-    if not os.path.exists(image_dir):
-        os.makedirs(image_dir)
-
-    if os.path.exists(VEH_MOTION_DATA_FILE):
-        os.remove(VEH_MOTION_DATA_FILE)
-    if os.path.exists(LANES_DATA_FILE):
-        os.remove(LANES_DATA_FILE)
-
-    os.system("rm -rf " + DATA_DIR + "*.mp4")
 
     signal.signal(signal.SIGUSR1, signal_handler)
     print("SIGUSR1 signal handler registered")
@@ -169,6 +196,9 @@ def process_data(smd, lock):
     dashcam_yaw = _config["sim"]["dashcam_rotation"][2]
     dashcam_fov = _config["sim"]["dashcam_fov"]
     save_debug_images = _config["recorder"]["save_debug_images"]
+    task_name = _config["recorder"]["task_name"]
+
+    init_data_dir(task_name)
 
     monitor = get_monitors()[0]
     print(str(monitor))
@@ -287,12 +317,12 @@ def process_data(smd, lock):
                 smd["data_fifo"] = data_fifo  # update the db
                 if "dashcam_img" in frame_data.keys():
                     store_veh_motion_data(
-                        frame_data["frame_id"], frame_data["ego_veh_info"]
+                        frame_data["frame_id"], frame_data["ego_veh_info"], task_name
                     )
                     store_lanes_data(
-                        cam_geo, frame_data["frame_id"], frame_data["lanes_data"]
+                        cam_geo, frame_data["frame_id"], frame_data["lanes_data"], task_name
                     )
-                    save_video(frame_data["dashcam_img"], "dashcam", fps)
+                    save_video(frame_data["dashcam_img"], "dashcam", fps, task_name)
                 else:
                     print(
                         "!!!! No dashcam image found, ignore this frame, frame_id: ",
