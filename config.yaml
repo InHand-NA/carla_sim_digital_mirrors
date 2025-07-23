@@ -10,11 +10,11 @@ carla:
   #vehicle_tag: 'wrangler_rubicon'
   steering_dead_zone: 0.1   # 0.001 for fanatec
   fps: 10
-  weather_preset: 'WetCloudySunset'
+  weather_preset: 'ClearSunset'
 
 recorder:
   save_debug_images: False
-  task_name: '20250723_002'
+  task_name: '20250723_003'
 
 
 sim:
@@ -24,20 +24,22 @@ sim:
     mirror_res: [640,480]
     dashcam_res: [1280,720]
 
-  sim_frames: 1000
+  sim_frames: 200
   # Make sure the time is similar to real time for a better experience of driving
   enable_mirror_view: False
-  real_time_mode: True
+  real_time_mode: False
   god_view_mode: True
   # Note: different vehicles have different mirror locations, add new locations below
   god_view_location: 
     charger_2020: [-4.0, 0.0, 3.0]
     wrangler_rubicon: [-4.0, 0.0, 3.0]
     firetruck: [-10.0, 0.0, 8.0]
+    sprinter: [-8.0, 0.0, 5.0]
   god_view_rotation:  # Pitch, Yaw, Roll
     charger_2020: [-10.0, 0.0, 0.0]
     wrangler_rubicon: [-10.0, 0.0, 0.0]
     firetruck: [-10.0, 0.0, 0.0]
+    sprinter: [-10.0, 0.0, 0.0]
 
   # Note: different vehicles have different mirror locations, add new locations below
   # Vehicle Half Size:
@@ -46,12 +48,14 @@ sim:
     charger_2020: [0.3, -0.38, 1.2]
     wrangler_rubicon: [0.3, -0.38, 1.2]
     firetruck: [3.1, -0.75, 2.8]
+    sprinter: [1.0, -0.5, 1.8]
 
   dashcam_fov: 60
   dashcam_location:
     charger_2020: [0.5, 0.0, 1.2]
     wrangler_rubicon: [0.5, 0.0, 1.2]
     firetruck: [3.8, 0.0, 2.8]
+    sprinter: [1.1, 0.0, 1.8]
 
   dashcam_rotation: [0.0, 0.0, 0.0] # Roll, Pitch, Yaw
 
@@ -65,6 +69,9 @@ sim:
     firetruck:
       left: [3.2, -1.45, 2.5]
       right:  [3.2, 1.45, 2.5]
+    sprinter:
+      left: [1.3, -1.0, 1.4]
+      right:  [1.3, 1.0, 1.4]
 
 
   controls:

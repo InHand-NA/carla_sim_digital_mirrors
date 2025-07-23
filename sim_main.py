@@ -178,12 +178,14 @@ def get_vehicle_metadata(vehicle):
     extent = bbox.extent  # Vector3D(x, y, z)
     metadata = {
         "id": vehicle.id,
+        "name": vehicle.type_id,
         "size": [
             round(extent.x * 2, 2),
             round(extent.y * 2, 2),
             round(extent.z * 2, 2),
         ],
     }
+    #print(f"vehicle metadata: {metadata}")
     return metadata
 
 
