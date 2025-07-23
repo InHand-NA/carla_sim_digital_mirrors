@@ -498,13 +498,15 @@ class Simulator(object):
             self.smd["fps"] = self.config.fps
             ego_vehicle_info = get_vehicle_info(self.ego_vehicle, cal_spd=True)
             self.smd["ego_veh_info"] = ego_vehicle_info
-            lanes_data = gather_lane_data(self.world, self.ego_vehicle, self.cam_locx, self.dc_sensor)
+            lanes_data = gather_lane_data(self.world, self.ego_vehicle, self.cam_locx, self.dc_sensor, driving_lanes_only=self.config.driving_lanes_only)
             self.smd["lanes_data"] = lanes_data
             #lanes_data_2d = get_2d_lanes_data(lanes_data, self.ego_vehicle.get_transform(), self.config.dashcam_res[1], self.config.dashcam_res[0], self.config.dashcam_fov)
             #lanes_data_2d = gather_lane_data_2d(self.ego_vehicle, self.world, self.dc_sensor, self.config.dashcam_res[1], self.config.dashcam_res[0], self.config.dashcam_fov)
             #print(f"dashcam location: {self.dc_sensor.get_transform().location}")
             #print(f"dashcam rotation: {self.dc_sensor.get_transform().rotation}")
-            lanes_data_2d = gather_lane_data_2d(self.ego_vehicle, self.world, self.dc_sensor, self.config.dashcam_res[1], self.config.dashcam_res[0], self.config.dashcam_fov)
+            lanes_data_2d = gather_lane_data_2d(self.ego_vehicle, self.world, self.dc_sensor, 
+                self.config.dashcam_res[1], self.config.dashcam_res[0], self.config.dashcam_fov,    
+                driving_lanes_only=self.config.driving_lanes_only)
             self.smd["lanes_data_2d"] = lanes_data_2d
             lock.release()
             # push data of current frame to fifo
@@ -565,7 +567,7 @@ class Simulator(object):
                 
                 if self.config.real_time_mode:
                     clock.tick_busy_loop(self.config.fps)
-                #clock.tick_busy_loop(10)
+                clock.tick_busy_loop(10)
                 this_tm = time.time()
                 if first_start_tm == 0 and "dashcam_view" in self.smd.keys():
                     first_start_tm = this_tm

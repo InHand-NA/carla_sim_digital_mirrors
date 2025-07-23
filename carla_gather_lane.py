@@ -84,15 +84,23 @@ def get_forward_lane_2d(waypoint, world_2_camera, K, img_w, img_h, distance=100)
         current = waypoint.next(count)[0]  # debug:
     while current and count < distance:
         lane_width = current.lane_width  # 单位为 meter
+        lane_type = current.lane_type
+
+        lm_width = 0 #current.left_lane_marking.width
+        rm_width = 0 #current.right_lane_marking.width
+        #if lane_type == carla.LaneType.Shoulder:
+        #    lm_width = current.left_lane_marking.width
+        #    rm_width = current.right_lane_marking.width
+        #    print(f"Shoulder: lm_width: {lm_width}, rm_width: {rm_width}")
 
         # 获取左侧和右侧车道线中心的位置（以当前 waypoint 为基准）
         left_marking_location = (
             current.transform.location
-            + current.transform.get_right_vector() * (-lane_width / 2.0)
+            + current.transform.get_right_vector() * (-lane_width / 2.0 + lm_width / 2.0)
         )
         right_marking_location = (
             current.transform.location
-            + current.transform.get_right_vector() * (lane_width / 2.0)
+            + current.transform.get_right_vector() * (lane_width / 2.0 - rm_width / 2.0)
         )
 
         left_point = get_image_point(left_marking_location, world_2_camera, K)
@@ -222,7 +230,7 @@ def draw_lane_data(lane_data):
     return img
 
 
-def gather_lane_data(world, ego_vehicle, cam_locx=3.8, camera=None, log=False):
+def gather_lane_data(world, ego_vehicle, cam_locx=3.8, camera=None, log=False, driving_lanes_only=True):
     """
     Gather lane data for the ego vehicle
     """
@@ -249,14 +257,14 @@ def gather_lane_data(world, ego_vehicle, cam_locx=3.8, camera=None, log=False):
         waypoint, ego_transform, cam_locx=cam_locx, distance=100.0
     )
 
-    if left_lane_wp is not None:
+    if left_lane_wp is not None and (not driving_lanes_only or left_lane_wp.lane_type == carla.LaneType.Driving):
         left_left_lane_line, left_right_lane_line = get_forward_lane(
             left_lane_wp, ego_transform, cam_locx=cam_locx, distance=100.0
         )
     else:
         left_left_lane_line = []
         left_right_lane_line = []
-    if right_lane_wp is not None:
+    if right_lane_wp is not None and (not driving_lanes_only or right_lane_wp.lane_type == carla.LaneType.Driving):
         right_left_lane_line, right_right_lane_line = get_forward_lane(
             right_lane_wp, ego_transform, cam_locx=cam_locx, distance=100.0
         )
@@ -276,7 +284,7 @@ def gather_lane_data(world, ego_vehicle, cam_locx=3.8, camera=None, log=False):
     return lanes_data
 
 
-def gather_lane_data_2d(ego_vehicle, world, camera, img_h, img_w, fov, log=False):
+def gather_lane_data_2d(ego_vehicle, world, camera, img_h, img_w, fov, log=False, driving_lanes_only=True):
     """
     Gather lane data for the ego vehicle
     """
@@ -293,14 +301,15 @@ def gather_lane_data_2d(ego_vehicle, world, camera, img_h, img_w, fov, log=False
 
     left_lane_wp = waypoint.get_left_lane()
     right_lane_wp = waypoint.get_right_lane()
-    if left_lane_wp is not None:
+    # Fixme: what about the other lane types?
+    if left_lane_wp is not None and (not driving_lanes_only or left_lane_wp.lane_type == carla.LaneType.Driving):
         left_left_lane_line_2d, left_right_lane_line_2d = get_forward_lane_2d(
             left_lane_wp, world_2_camera, K, img_w, img_h, distance=100.0
         )
     else:
         left_left_lane_line_2d = []
         left_right_lane_line_2d = []
-    if right_lane_wp is not None:
+    if right_lane_wp is not None and (not driving_lanes_only or right_lane_wp.lane_type == carla.LaneType.Driving):
         right_left_lane_line_2d, right_right_lane_line_2d = get_forward_lane_2d(
             right_lane_wp, world_2_camera, K, img_w, img_h, distance=100.0
         )

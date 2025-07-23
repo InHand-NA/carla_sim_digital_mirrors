@@ -14,7 +14,8 @@ carla:
 
 recorder:
   save_debug_images: False
-  task_name: '20250723_009'
+  task_name: '20250723_012'
+  driving_lanes_only: True
 
 
 sim:
@@ -24,7 +25,7 @@ sim:
     mirror_res: [640,480]
     dashcam_res: [1280,720]
 
-  sim_seconds: 30
+  sim_seconds: 600
   # Make sure the time is similar to real time for a better experience of driving
   enable_mirror_view: False
   real_time_mode: True

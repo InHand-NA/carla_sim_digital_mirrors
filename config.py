@@ -33,6 +33,7 @@ class Config(object):
         # recorder config
         self.recorder_save_debug_images = self.config["recorder"]["save_debug_images"]
         self.recorder_task_name = self.config["recorder"]["task_name"]
+        self.driving_lanes_only = self.config["recorder"]["driving_lanes_only"]
 
         # sim config
         self.default_control = self.config["sim"]["default_control"]
