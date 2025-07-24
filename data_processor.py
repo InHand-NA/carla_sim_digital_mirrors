@@ -9,6 +9,7 @@ import json
 import signal
 import sys
 from camera_geometry import CameraGeometry
+from carla_gather_lane import get_ipm_lane_data
 
 MB = 1000 * 1000
 
@@ -115,10 +116,12 @@ def get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h=720, img_w=1280):
 def store_lanes_data(cam_geo, frame_id, lanes_data, lanes_data_2d, task_name: str, img_h=720, img_w=1280):
     #lanes_data_2d_list = get_2d_lanes_data(cam_geo, frame_id, lanes_data, img_h, img_w)
     lanes_data_2d_list = lanes_data_2d
+    lanes_data_ipm_list = get_ipm_lane_data(cam_geo, lanes_data_2d_list)
     data = {
         "frame_id": frame_id,
         "lanes_3d": lanes_data,
         "lanes_2d": lanes_data_2d_list,
+        "lanes_ipm": lanes_data_ipm_list,
     }
     data_str = json.dumps(data)
 
@@ -292,7 +295,7 @@ def process_data(smd, lock):
         )
 
         lane_found = False
-        if "lanes_data" in smd.keys():
+        if "lanes_data_2d" in smd.keys():
             lock.acquire()
             #lanes_2d = get_2d_lanes_data(cam_geo, frame_count, smd["lanes_data"])
             lanes_2d = smd["lanes_data_2d"]

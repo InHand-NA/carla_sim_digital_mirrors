@@ -324,3 +324,18 @@ def gather_lane_data_2d(ego_vehicle, world, camera, img_h, img_w, fov, log=False
         right_right_lane_line_2d,
     ]
     return lanes_data_2d
+
+
+def get_ipm_lane_data(cam_geo, lanes_data_2d):
+    """
+    Get the ipm lane data for the ego vehicle
+    """
+    lanes_data_ipm = []
+    for lane_data_2d in lanes_data_2d:
+        lane_data_ipm = []
+        for point_2d in lane_data_2d:
+            if point_2d is not None:
+                point_3d = cam_geo.uv_to_roadXYZ_roadframe_iso8855(point_2d[0], point_2d[1])
+                lane_data_ipm.append([point_3d[0], point_3d[1], point_3d[2]])
+        lanes_data_ipm.append(lane_data_ipm)
+    return lanes_data_ipm
