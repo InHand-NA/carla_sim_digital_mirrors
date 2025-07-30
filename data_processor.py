@@ -74,16 +74,14 @@ def store_veh_motion_data(frame_id, veh_mot_info, task_name: str):
     if not os.path.exists(veh_motion_data_file):
         with open(veh_motion_data_file, "w") as f:
             f.write(
-                "frame_id, locx, locy, locz, vx, vy, vz, accx, accy, accz, angvelx, angvely, angvelz, spd_kmh\n"
+                "frame_id, vx, vy, vz, angvelx, angvely, angvelz, spd_kmh\n"
             )
     with open(veh_motion_data_file, "a") as f:
         f.write(
             f"""{frame_id},"""
-            f"""{veh_mot_info["location"][0]},{veh_mot_info["location"][1]},{veh_mot_info["location"][2]},"""
             f"""{veh_mot_info["velocity"][0]},{veh_mot_info["velocity"][1]},{veh_mot_info["velocity"][2]},"""
-            f"""{veh_mot_info["acceleration"][0]},{veh_mot_info["acceleration"][1]},{veh_mot_info["acceleration"][2]},"""
-            f"""{veh_mot_info["angular_velocity"][0]},{veh_mot_info["angular_velocity"][1]},{veh_mot_info["angular_velocity"][2]},"""
-            f"""{veh_mot_info["speed"]}\n"""
+            f"""{veh_mot_info["angular_velocity_degps"][0]},{veh_mot_info["angular_velocity_degps"][1]},{veh_mot_info["angular_velocity_degps"][2]},"""
+            f"""{veh_mot_info["speed_kmph"]}\n"""
         )
 
 
@@ -268,8 +266,8 @@ def process_data(smd, lock):
 
         if "ego_veh_info" in smd.keys():
             ego_veh_info = smd["ego_veh_info"]
-            spd_kmh = ego_veh_info["speed"]
-            yaw_velocity = ego_veh_info["yaw_velocity"]
+            spd_kmh = ego_veh_info["speed_kmph"]
+            yaw_velocity = ego_veh_info["yaw_velocity_degps"]
         else:
             spd_kmh = -1
             yaw_velocity = -1

@@ -29,6 +29,7 @@ class Config(object):
         self.fps = int(self.config["carla"]["fps"])
         self.fixed_delta_seconds = 1.0 / self.fps
         self.weather_preset = self.config["carla"]["weather_preset"]
+        self.lane_change_percentage = self.config["carla"]["lane_change_percentage"]
 
         # recorder config
         self.recorder_save_debug_images = self.config["recorder"]["save_debug_images"]

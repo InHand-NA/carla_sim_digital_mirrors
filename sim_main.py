@@ -18,6 +18,7 @@ from config import Config, mirror_parameters
 from carla_gather_vehicle_data import get_vehicle_info
 from carla_gather_lane import gather_lane_data, gather_lane_data_2d
 from data_processor import process_data, DATA_DIR, data_processor_loop
+from camera_geometry import CameraGeometry
 
 
 MB = 1000 * 1000
@@ -68,17 +69,31 @@ def process_image_data(image_data, view_id, flip=False):
     lock.release()
 
 
-def set_ego_autopilot_args(vehicle, tm):
+
+gl_direction = False
+
+def my_force_lane_change(vehicle, tm):
+    global gl_direction
+
+    gl_direction = not gl_direction
+
+    tm.force_lane_change(vehicle, gl_direction)
+    print(f"force lane change to {'right' if gl_direction else 'left'}")
+    return gl_direction
+
+
+def set_ego_autopilot_args(vehicle, tm, lane_change_percentage):
     # Disable auto lane change
-    tm.auto_lane_change(vehicle, True)
+    #tm.auto_lane_change(vehicle, True)
     # Set random speed
     #percentage = random.randint(-50, 0)
     #tm.vehicle_percentage_speed_difference(vehicle, percentage)
-    tm.set_desired_speed(vehicle, 100)
+    tm.set_desired_speed(vehicle, 10)
     # Set keep right rule
     # tm.set_keep_right_rule(vehicle, True)
-    tm.random_left_lanechange_percentage(vehicle, 15)
-    tm.random_right_lanechange_percentage(vehicle, 15)
+    #tm.random_left_lanechange_percentage(vehicle, int(lane_change_percentage))
+    #tm.random_right_lanechange_percentage(vehicle, int(lane_change_percentage))
+
     # Ignore lights, signs and vehicles
     tm.ignore_lights_percentage(vehicle, 0)  # 忽略红绿灯
     tm.ignore_signs_percentage(vehicle, 10)  # 忽略交通标志
@@ -254,11 +269,23 @@ class Simulator(object):
         self.mp = mirror_parameters()
         self.smd = smd
         self.lock = lock
+        self.force_lane_change_fid = 0
         pass
 
     def stop_sensors(self, sensors_list):
         for sensor in sensors_list:
             sensor.stop()
+
+    def get_ego_vehicle(self):
+        ego_vehicle = None
+        for actor in self.world.get_actors():
+            if actor.type_id.startswith("vehicle.") and actor.attributes.get('role_name') == 'hero':
+                ego_vehicle = actor
+                break
+
+        if ego_vehicle is None:
+            print("Ego vehicle not found!")
+        return ego_vehicle
 
     def init_sim(self):
         config = self.config
@@ -443,7 +470,7 @@ class Simulator(object):
         self.my_controller = controller(self.ego_vehicle, config)
 
         if config.autopilot:
-            set_ego_autopilot_args(self.ego_vehicle, self.traffic_manager)
+            set_ego_autopilot_args(self.ego_vehicle, self.traffic_manager, config.lane_change_percentage)
 
         bbox = ego_vehicle.bounding_box
         extent = bbox.extent  # Vector3D(x, y, z)
@@ -476,6 +503,16 @@ class Simulator(object):
             print(f"Warning: substepping args are not good with fixed_delta_seconds: {fixed_delta_seconds}!!!!!!!")
         #self.world.apply_settings(settings)
 
+        self.cam_geo = CameraGeometry(
+                    height=self.config.dashcam_location[vehicle_tag][2],
+                    yaw_deg=self.config.dashcam_rotation[2],
+                    pitch_deg=self.config.dashcam_rotation[1],
+                    roll_deg=self.config.dashcam_rotation[0],
+                    field_of_view_deg=self.config.dashcam_fov,
+                    image_width=self.config.dashcam_res[0],
+                    image_height=self.config.dashcam_res[1],
+                )
+
     def run_sim(self):
         # Game loop
         crashed = False
@@ -490,10 +527,14 @@ class Simulator(object):
             fid = self.world.tick()
             if last_fid > 0 and fid - last_fid > 1:
                 print(f"!!!! sim_main: Frame id gap: {fid - last_fid}")
+            if last_fid < 0:
+                # init the force_lane_change_fid
+                self.force_lane_change_fid = fid
             last_fid = fid
+            self.ego_vehicle = self.get_ego_vehicle()
             lock.acquire()
             self.smd["frame_count"] = fid
-            seconds = fid / self.config.fps
+            seconds = (fid - first_fid) / self.config.fps
             self.smd["seconds"] = seconds
             self.smd["fps"] = self.config.fps
             ego_vehicle_info = get_vehicle_info(self.ego_vehicle, cal_spd=True)
@@ -506,6 +547,7 @@ class Simulator(object):
             #print(f"dashcam rotation: {self.dc_sensor.get_transform().rotation}")
             lanes_data_2d = gather_lane_data_2d(self.ego_vehicle, self.world, self.dc_sensor, 
                 self.config.dashcam_res[1], self.config.dashcam_res[0], self.config.dashcam_fov,    
+                cam_start_x=self.cam_geo.start_x,
                 driving_lanes_only=self.config.driving_lanes_only)
             self.smd["lanes_data_2d"] = lanes_data_2d
             lock.release()
@@ -529,13 +571,26 @@ class Simulator(object):
             else:
                 print("!!!! No dashcam image found, ignore this frame, frame_id: ", fid)
 
+            self.traffic_manager = self.client.get_trafficmanager()
+
             if self.config.autopilot:
-                set_ego_autopilot_args(self.ego_vehicle, self.traffic_manager)
+                #set_ego_autopilot_args(self.ego_vehicle, self.traffic_manager, self.config.lane_change_percentage)
+                pass
             else:
                 self.my_controller.parse_vehicle_wheel()
                 self.my_controller._control.reverse = (
                     self.my_controller._control.gear < 0
                 )
+
+            # force lane change every 15 seconds
+            if fid - self.force_lane_change_fid > 20 * self.config.fps:
+                direction = my_force_lane_change(self.ego_vehicle, self.traffic_manager)
+                self.force_lane_change_fid = fid
+                #print(f"Repeat force lane change, direction: {direction}")
+                #self.world.tick()
+                #self.traffic_manager.force_lane_change(self.ego_vehicle, direction)     
+               # self.world.tick()
+                #self.traffic_manager.force_lane_change(self.ego_vehicle, direction)
 
             # Update the display
             self.display.blit(self.renderObject.surface, (0, 0))

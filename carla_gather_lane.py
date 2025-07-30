@@ -58,6 +58,7 @@ def get_image_point(world_location, world_2_camera, K):
     point_camera = [point_camera[1], -point_camera[2], point_camera[0]]
     # point_camera = point_camera[:3]
     if point_camera[2] <= 0:
+        # remove the point behind the camera
         return None
 
     # now project 3D->2D using the camera matrix
@@ -70,12 +71,12 @@ def get_image_point(world_location, world_2_camera, K):
     return int(round(point_img[0])), int(round(point_img[1]))
 
 
-def get_forward_lane_2d(waypoint, world_2_camera, K, img_w, img_h, distance=100):
+def get_forward_lane_2d(waypoint, world_2_camera, K, img_w, img_h, distance=100, cam_start_x=0):
     """
     Get the forward lane of the ego vehicle
     """
     step = 1.0
-    count = 10
+    count = cam_start_x # 从相机前方count米的waypoint开始；
     left_lane_line_2d = []
     right_lane_line_2d = []
     if count == 0:
@@ -111,7 +112,7 @@ def get_forward_lane_2d(waypoint, world_2_camera, K, img_w, img_h, distance=100)
             left_point is not None
             and left_point[0] > 0
             and left_point[0] < img_w
-            and left_point[1] > 0
+            and left_point[1] > img_h/4 # 车道线必须出现在图像的1/4以下位置
             and left_point[1] < img_h
         ):
             left_lane_line_2d.append(left_point)
@@ -119,7 +120,7 @@ def get_forward_lane_2d(waypoint, world_2_camera, K, img_w, img_h, distance=100)
             right_point is not None
             and right_point[0] > 0
             and right_point[0] < img_w
-            and right_point[1] > 0
+            and right_point[1] > img_h/4
             and right_point[1] < img_h
         ):
             right_lane_line_2d.append(right_point)
@@ -284,7 +285,7 @@ def gather_lane_data(world, ego_vehicle, cam_locx=3.8, camera=None, log=False, d
     return lanes_data
 
 
-def gather_lane_data_2d(ego_vehicle, world, camera, img_h, img_w, fov, log=False, driving_lanes_only=True):
+def gather_lane_data_2d(ego_vehicle, world, camera, img_h, img_w, fov, cam_start_x=0, log=False, driving_lanes_only=True):
     """
     Gather lane data for the ego vehicle
     """
@@ -296,7 +297,7 @@ def gather_lane_data_2d(ego_vehicle, world, camera, img_h, img_w, fov, log=False
         veh_location, project_to_road=True, lane_type=carla.LaneType.Driving
     )
     left_lane_line_2d, right_lane_line_2d = get_forward_lane_2d(
-        waypoint, world_2_camera, K, img_w, img_h, distance=100.0
+        waypoint, world_2_camera, K, img_w, img_h, distance=100.0, cam_start_x=cam_start_x
     )
 
     left_lane_wp = waypoint.get_left_lane()
@@ -304,14 +305,14 @@ def gather_lane_data_2d(ego_vehicle, world, camera, img_h, img_w, fov, log=False
     # Fixme: what about the other lane types?
     if left_lane_wp is not None and (not driving_lanes_only or left_lane_wp.lane_type == carla.LaneType.Driving):
         left_left_lane_line_2d, left_right_lane_line_2d = get_forward_lane_2d(
-            left_lane_wp, world_2_camera, K, img_w, img_h, distance=100.0
+            left_lane_wp, world_2_camera, K, img_w, img_h, distance=100.0, cam_start_x=cam_start_x
         )
     else:
         left_left_lane_line_2d = []
         left_right_lane_line_2d = []
     if right_lane_wp is not None and (not driving_lanes_only or right_lane_wp.lane_type == carla.LaneType.Driving):
         right_left_lane_line_2d, right_right_lane_line_2d = get_forward_lane_2d(
-            right_lane_wp, world_2_camera, K, img_w, img_h, distance=100.0
+            right_lane_wp, world_2_camera, K, img_w, img_h, distance=100.0, cam_start_x=cam_start_x
         )
     else:
         right_left_lane_line_2d = []
