@@ -353,6 +353,11 @@ class Simulator(object):
         ego_vehicle.set_autopilot(config.autopilot)
         self.ego_vehicle = ego_vehicle
 
+        # get the bounding box extent of ego vehicle
+        bbox = ego_vehicle.bounding_box
+        extent = bbox.extent  # Vector3D(x, y, z)
+        print(f"Bounding box extent of ego vehicle: {extent}")
+
         if config.enable_mirror_view:
             # Find the blueprint of the sensor.
             mirror_blueprint = world.get_blueprint_library().find("sensor.camera.rgb")
@@ -472,9 +477,6 @@ class Simulator(object):
         if config.autopilot:
             set_ego_autopilot_args(self.ego_vehicle, self.traffic_manager, config.lane_change_percentage)
 
-        bbox = ego_vehicle.bounding_box
-        extent = bbox.extent  # Vector3D(x, y, z)
-        print(f"Bounding box extent of ego vehicle: {extent}")
         lock.acquire()
         self.smd["data_fifo"] = []
         lock.release()
