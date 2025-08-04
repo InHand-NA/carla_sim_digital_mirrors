@@ -71,9 +71,9 @@ def main():
     argparser.add_argument(
         '-n', '--number-of-vehicles',
         metavar='N',
-        default=50,
+        default=15,
         type=int,
-        help='Number of vehicles (default: 50)')
+        help='Number of vehicles (default: 15)')
     argparser.add_argument(
         '-w', '--number-of-walkers',
         metavar='W',
@@ -165,6 +165,17 @@ def main():
     try:
         world = client.get_world()
 
+        # Find ego vehicle (role_name="hero")
+        ego_vehicle = None
+        for actor in world.get_actors().filter("vehicle.*"):
+            if actor.attributes.get("role_name") == "hero":
+                ego_vehicle = actor
+                break
+
+        if ego_vehicle is None:
+            print("Ego vehicle with role_name='hero' not found. Spawning near center of map.")
+
+
         traffic_manager = client.get_trafficmanager(args.tm_port)
         traffic_manager.set_global_distance_to_leading_vehicle(2.5)
         if args.respawn:
@@ -176,12 +187,13 @@ def main():
             traffic_manager.set_random_device_seed(args.seed)
 
         settings = world.get_settings()
+        settings.actors_active_distance = 1000
         if not args.asynch:
             traffic_manager.set_synchronous_mode(True)
             if not settings.synchronous_mode:
                 synchronous_master = True
                 settings.synchronous_mode = True
-                settings.fixed_delta_seconds = 0.05
+                settings.fixed_delta_seconds = 0.1
             else:
                 synchronous_master = False
         else:
@@ -208,15 +220,20 @@ def main():
 
         blueprints = sorted(blueprints, key=lambda bp: bp.id)
 
-        spawn_points = world.get_map().get_spawn_points()
-        number_of_spawn_points = len(spawn_points)
+        # Get all spawn points
+        all_spawn_points = world.get_map().get_spawn_points()
 
-        if args.number_of_vehicles < number_of_spawn_points:
-            random.shuffle(spawn_points)
-        elif args.number_of_vehicles > number_of_spawn_points:
-            msg = 'requested %d vehicles, but could only find %d spawn points'
-            logging.warning(msg, args.number_of_vehicles, number_of_spawn_points)
-            args.number_of_vehicles = number_of_spawn_points
+        # Use ego location or fallback to map center
+        reference_location = ego_vehicle.get_location() if ego_vehicle else carla.Location(0, 0, 0)
+
+        # Sort by distance to ego
+        sorted_spawn_points = sorted(
+            all_spawn_points,
+            key=lambda p: p.location.distance(reference_location)
+        )
+
+        # Take the closest N points
+        spawn_points = sorted_spawn_points[:args.number_of_vehicles]
 
         # @todo cannot import these directly.
         SpawnActor = carla.command.SpawnActor
@@ -355,6 +372,8 @@ def main():
 
         # Example of how to use Traffic Manager parameters
         traffic_manager.global_percentage_speed_difference(30.0)
+        traffic_manager.set_respawn_dormant_vehicles(mode_switch=True)
+        traffic_manager.set_boundaries_respawn_dormant_vehicles(25,500)
 
         while True:
             if not args.asynch and synchronous_master:

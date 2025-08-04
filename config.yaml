@@ -5,13 +5,22 @@ carla:
   autopilot: False
   timeout: 200
   no_rendering_mode: True
-  world: 'Town10HD_Opt'
-  vehicle_tag: 'charger_2020'
+  world: 'Town04'
+  vehicle_tag: 'european_hgv'
+  #vehicle_tag: 'charger_2020'
   #vehicle_tag: 'wrangler_rubicon'
   steering_dead_zone: 0.1   # 0.001 for fanatec
+  fps: 10
+
+recorder:
+  save_debug_images: False
+  task_name: '20250723_014'
+  driving_lanes_only: True
 
 sim:
-  default_control: 'G920_Racing_Wheel'
+  sim_seconds: 300
+  real_time_mode: True
+  default_control: 'Logitech G920 Driving Force Racing Wheel' #'G920_Racing_Wheel'
   windows:
     front_res: [2560,1440]
     mirror_res: [640,480]
@@ -19,6 +28,9 @@ sim:
 
   # Note: different vehicles have different mirror locations, add new locations below
   mirror_location:
+    european_hgv:
+      left: [2, -1, 2]
+      right: [2, 1, 2]
     charger_2020:
       left: [0.5, -1, 1.0]
       right:  [0.5, 1, 1.0]
@@ -27,14 +39,20 @@ sim:
       right:  [0.5, 1, 1.5]   
 
   controls:
-    G920_Racing_Wheel:
+    PXN V900:
+      steering_wheel: 0
+      throttle: 5               
+      brake: 2
+      reverse: 0
+      handbrake: 4
+      accel: 3
+    Logitech G920 Driving Force Racing Wheel:
       steering_wheel: 0
       throttle: 1               
       brake: 3
       reverse: 15
       handbrake: 4
       accel: 14
-
     xboxone:
       steering_wheel: 0
       throttle: 5

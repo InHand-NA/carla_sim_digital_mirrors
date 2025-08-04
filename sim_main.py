@@ -9,10 +9,14 @@ import math
 import pygame
 import threading
 import queue
+import gc
+import psutil
 from ruamel.yaml import YAML
 from pathlib import Path
 from shared_memory_dict import SharedMemoryDict
 from PIL import Image
+from multiprocessing import shared_memory
+from config import Config, mirror_parameters
 
 from pygame.locals import K_a
 from pygame.locals import K_w
@@ -29,6 +33,7 @@ smd = SharedMemoryDict(name='tokens', size=50000000)
 # Read Config File
 configfile=Path("config.yaml")
 _config = YAML(typ='safe').load(configfile)
+config = Config()
 
 control_device=_config['sim']['default_control']
 
@@ -46,6 +51,7 @@ class RenderObject(object):
         init_image = np.random.randint(0,255,(height,width,3),dtype='uint8')
         self.surface = pygame.surfarray.make_surface(init_image.swapaxes(0,1))
 
+gc.disable()
 run_num = 0
 frame_count = 0
 frame_skip = 2
@@ -60,6 +66,25 @@ output_dir = os.path.join(base_dir, f"run{run_num}")
 os.makedirs(output_dir, exist_ok=True)
 
 save_img_queue = queue.Queue()
+smd_queue = queue.Queue()
+
+shutdown_in_progress = threading.Event()
+
+frame_counter = {"dashcam_view": 0, "left_mirror_view": 0, "right_mirror_view": 0}
+
+start_time = time.time()
+
+def should_write(view_id, every_n=2):
+    frame_counter[view_id] += 1
+    return frame_counter[view_id] % every_n == 0
+
+
+def flush_queue(q):
+    try:
+        while True:
+            q.get_nowait()
+    except queue.Empty:
+        pass
 
 def save_img_worker():
     while True:
@@ -74,26 +99,53 @@ def save_img_worker():
 
 threading.Thread(target=save_img_worker, daemon=True).start()
 
+def smd_worker():
+    while True:
+        try:
+            item = smd_queue.get(timeout=0.1)
+            if item is None:
+                break
+            key, value = item
+            smd[key] = value
+            smd_queue.task_done()
+        except:
+            continue
+
+# Start background writer
+threading.Thread(target=smd_worker, daemon=True).start()
+
+def get_kmh_speed(vehicle):
+    """Returns speed in km/h."""
+    velocity = vehicle.get_velocity()
+    speed = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
+    return speed * 3.6  # Convert m/s to km/h
+
+
+def get_mph_speed(vehicle):
+    """Returns speed in mph."""
+    velocity = vehicle.get_velocity()
+    speed = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
+    return speed * 2.23694  #
+
 
 # Dashcam view sensor callback, saves frames as images based on chosen frame rate
 # As well as display to its own window when dashcam_view.py is run
 def dashcam_callback(data, view_id):
-    global frame_count
+    if shutdown_in_progress.is_set() or not should_write(view_id):
+        return
 
-    img = np.reshape(np.copy(data.raw_data), (data.height, data.width, 4))
+    img = np.frombuffer(data.raw_data, dtype=np.uint8).reshape((data.height, data.width, 4))
+    img = img[:, :, :3][:, :, ::-1]  # Convert BGRA to BGR
 
-    display_img = img[:, :, :3][:, :, ::-1]
     try:
-        if smd._memory_block is not None:
-            smd[view_id] = img
+        smd_queue.put_nowait((view_id, img))
     except Exception as e:
-        print(f"[SharedMemory Error] {e}")
+        print(f"[SharedMemory Error] {e} in dashcam_callback")
 
-    if frame_count % frame_skip == 0:
+
+    '''if frame_count % frame_skip == 0:
         saved_img = img[:, :, :3]
-        save_img_queue.put((saved_img.copy(), data.frame))
-
-    frame_count += 1
+        save_img_queue.put((saved_img.copy(), data.frame))'''
 
 # Driver view sensor callback, reshapes raw data from camera into 2D RGB and applies to PyGame surface
 def driver_callback(data, obj):
@@ -101,20 +153,37 @@ def driver_callback(data, obj):
     save_img = img[:, :, :3][:, :, ::-1]
     obj.surface = pygame.surfarray.make_surface(save_img.swapaxes(0, 1))
 
-
-# Camera sensor callback, reshapes raw data from camera into 2D RGB and applies to PyGame surface
-def process_image_data(image_data, view_id, flip=False):
-    img = np.reshape(np.copy(image_data.raw_data), (image_data.height, image_data.width, 4))
-    img = img[:,:,:3]
-    img = img[:, :, ::-1]
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)	
+"""def process_image_data(image_data, view_id, flip=False):
+    if shutdown_in_progress.is_set():
+        return
+    
+    # Process image (this happens every frame for 10 FPS)
+    img = np.frombuffer(image_data.raw_data, dtype=np.uint8).reshape((image_data.height, image_data.width, 4))
+    img = img[:, :, :3]
+    img = cv2.cvtColor(img[:, :, ::-1], cv2.COLOR_BGR2RGB)
     if flip:
-        img=cv2.flip(img, 1)
+        img = cv2.flip(img, 1)
+    
+    # Non-blocking write to SMD
     try:
-        if smd._memory_block is not None:
-            smd[view_id] = img
+        smd_queue.put_nowait((view_id, img))
+    except:
+        pass  # Drop frame if queue full - better than blocking main thread"""
+"""# Camera sensor callback, reshapes raw data from camera into 2D RGB and applies to PyGame surface
+def process_image_data(image_data, view_id, flip=False):
+    if shutdown_in_progress.is_set() or not should_write(view_id):
+        return
+
+    img = np.frombuffer(image_data.raw_data, dtype=np.uint8).reshape((image_data.height, image_data.width, 4))
+    img = img[:, :, :3]
+    img = cv2.cvtColor(img[:, :, ::-1], cv2.COLOR_BGR2RGB)
+    if flip:
+        img = cv2.flip(img, 1)
+
+    try:
+        smd[view_id] = img
     except Exception as e:
-        print(f"[SharedMemory Error] {e}")
+        print(f"[SharedMemory Error] {e} in process_image_data")"""
 
 def save_vid():
     input_dir = output_dir
@@ -159,13 +228,24 @@ class controller ():
             joystick_count = pygame.joystick.get_count()
             #if joystick_count > 1:
             #    raise ValueError("Please Connect one Joystick")
-            if joystick_count ==0 :
+            '''if joystick_count ==0 :
                 raise ValueError("No joystick connected")
 
             if control_device=='fanatec':
                 self._joystick = pygame.joystick.Joystick(1)
             else:
                 self._joystick = pygame.joystick.Joystick(0)
+'''
+
+            for i in range(pygame.joystick.get_count()):
+                js = pygame.joystick.Joystick(i)
+                js.init()
+                if control_device in js.get_name():
+                    self._joystick = js
+                    print(f"Using joystick {i}: {js.get_name()}")
+                    break
+            else:
+                raise ValueError(f"No joystick found matching: {control_device}")
 
             self._joystick.init()
 
@@ -194,7 +274,7 @@ class controller ():
                         range(self._joystick.get_numbuttons())]
 
         # Invert Control Signals if needed
-        if control_device=='fanatec':
+        if control_device=='fanatec' or control_device == 'Logitech G920 Driving Force Racing Wheel':
             ic=-1
         else:
             ic=1
@@ -234,7 +314,7 @@ class controller ():
         K2 = 1 #+ accel_input * (1.6 - 0.5)# reduce to slow down acceleration (play with values like 0.3–0.6)
 
         # Normalize the throttle input from [-1, 1] to [0, 1]
-        raw_throttle = -jsInputs[self._throttle_idx]
+        raw_throttle = jsInputs[self._throttle_idx] * ic
         throttle_input = max(0.0, min((raw_throttle + 1) / 2.0, 1.0))
         #throttle_input = (jsInputs[self._throttle_idx] + 1) / 2
 
@@ -252,7 +332,7 @@ class controller ():
         
 
         # Normalize the brake input from [1.0 → -1.0] to [0.0 → 1.0]
-        raw_brake = -jsInputs[self._brake_idx]
+        raw_brake = jsInputs[self._brake_idx] * ic
         brake_input = max(0.0, min((raw_brake + 1) / 2.0, 1.0))
 
         # Optional: apply smooth non-linear curve (square = gentle start, hard end)
@@ -316,7 +396,7 @@ world.set_weather(weather)
 settings = world.get_settings()
 settings.no_rendering_mode=_config['carla']['no_rendering_mode']
 settings.synchronous_mode = True # Enables synchronous mode
-settings.fixed_delta_seconds = 0.05
+settings.fixed_delta_seconds = 0.1
 world.apply_settings(settings)
 
 # Set up the TM in synchronous mode
@@ -343,12 +423,12 @@ vehicle = world.spawn_actor(bp, random.choice(world.get_map().get_spawn_points()
 vehicle_list.append(vehicle)
 vehicle.set_autopilot(autopilot)
 
-# Find the blueprint of the sensor.
+"""# Find the blueprint of the sensor.
 mirror_blueprint = world.get_blueprint_library().find('sensor.camera.rgb')
 # Modify the attributes of the blueprint to set image resolution and field of view.
 mirror_blueprint.set_attribute('image_size_x', str(mirror_window_size[0]))
 mirror_blueprint.set_attribute('image_size_y', str(mirror_window_size[0]))
-mirror_blueprint.set_attribute('fov', '110')
+mirror_blueprint.set_attribute('fov', '110')"""
 
 
 # Find the blueprint of the sensor.
@@ -365,6 +445,10 @@ dash_blueprint.set_attribute('image_size_x', str(front_window_size[0]))
 dash_blueprint.set_attribute('image_size_y', str(front_window_size[1]))
 dash_blueprint.set_attribute('fov', '110')
 
+#mirror_blueprint.set_attribute('sensor_tick', '0.5')
+car_blueprint.set_attribute('sensor_tick', '0.1')
+dash_blueprint.set_attribute('sensor_tick', '0.1')
+
 
 # Set the time in seconds between sensor captures
 #blueprint.set_attribute('sensor_tick', '1')
@@ -376,16 +460,20 @@ dash_blueprint.set_attribute('fov', '110')
 
 # lookup pre-defined mirror locations based on vehicle tag
 
-lx, ly,lz = _config['sim']['mirror_location'][vehicle_tag]['left']
+"""lx, ly,lz = _config['sim']['mirror_location'][vehicle_tag]['left']
 rx, ry, rz = _config['sim']['mirror_location'][vehicle_tag]['right']
 left_mirror_transform = carla.Transform(carla.Location(x=lx, y=ly, z=lz), carla.Rotation(pitch=mp.left_pitch, yaw=mp.left_yaw))
-right_mirror_transform = carla.Transform(carla.Location(x=rx, y=ry, z=rz), carla.Rotation(pitch=mp.right_pitch,yaw=mp.right_yaw))
+right_mirror_transform = carla.Transform(carla.Location(x=rx, y=ry, z=rz), carla.Rotation(pitch=mp.right_pitch,yaw=mp.right_yaw))"""
 dashcam_view_transform = carla.Transform(carla.Location(x=0.8, z=1.7))
-driver_view_transform = carla.Transform(carla.Location(x=0.25, y=-0.4, z=1.25), carla.Rotation(pitch=0,yaw=0))
+# for european_hgv
+driver_view_transform = carla.Transform(carla.Location(x=2.8, y=-0.45, z=2.8), carla.Rotation(pitch=0,yaw=0))
+
+# for charger_2020
+#driver_view_transform = carla.Transform(carla.Location(x=0.25, y=-0.4, z=1.25), carla.Rotation(pitch=0,yaw=0))
 
 # Tell the world to spawn the sensor, don't forget to attach it to your vehicle actor.
-lmv_sensor = world.spawn_actor(mirror_blueprint, left_mirror_transform, attach_to=vehicle_list[0])
-rmv_sensor = world.spawn_actor(mirror_blueprint, right_mirror_transform, attach_to=vehicle_list[0])
+'''lmv_sensor = world.spawn_actor(mirror_blueprint, left_mirror_transform, attach_to=vehicle_list[0])
+rmv_sensor = world.spawn_actor(mirror_blueprint, right_mirror_transform, attach_to=vehicle_list[0])'''
 driver_sensor = world.spawn_actor(car_blueprint, driver_view_transform, attach_to=vehicle_list[0])
 dashcam_sensor = world.spawn_actor(dash_blueprint, dashcam_view_transform, attach_to=vehicle_list[0])
 
@@ -393,8 +481,12 @@ dashcam_sensor = world.spawn_actor(dash_blueprint, dashcam_view_transform, attac
 # called each time a new image is generated by the sensor.
 driver_sensor.listen(lambda data: driver_callback(data, renderObject))
 dashcam_sensor.listen(lambda data: dashcam_callback(data, "dashcam_view"))
+'''rmv_sensor.listen(lambda data: process_image_data(data, "right_mirror_view", True))
+lmv_sensor.listen(lambda data: process_image_data(data, "left_mirror_view", True))'''
+'''driver_sensor.listen(lambda data: driver_callback(data, renderObject))
+dashcam_sensor.listen(lambda data: dashcam_callback(data, "dashcam_view"))
 rmv_sensor.listen(lambda data: process_image_data(data, "right_mirror_view", True))
-lmv_sensor.listen(lambda data: process_image_data(data, "left_mirror_view", True))
+lmv_sensor.listen(lambda data: process_image_data(data, "left_mirror_view", True))'''
 
 # Game loop
 crashed = False
@@ -405,6 +497,8 @@ image_h = car_blueprint.get_attribute("image_size_y").as_int()
 renderObject = RenderObject(image_w, image_h)
 
 pygame.init()
+pygame.font.init()
+font = pygame.font.SysFont('Arial', 30)
 display = pygame.display.set_mode(front_window_size,  pygame.HWSURFACE | pygame.DOUBLEBUF, display=0 , vsync=1)  # pygame.FULLSCREEN |
 # Draw black to the display
 display.fill((0,0,0))
@@ -416,32 +510,66 @@ my_controller=controller(vehicle)
 
 frame_count = 0
 
+flush_queue(save_img_queue)
+
 try: 
+    clock = pygame.time.Clock()
+    first_start_tm = 0
+    first_fid = 0
+    last_fid = -1
+
+    # Add frame timing tracking
+    frame_times = []
+    max_frame_history = 100
+    
     while not crashed:
+        loop_start = time.time()
         # Advance the simulation time
-        world.tick()
+        fid = world.tick()
+
+        tick_time = time.time()
+        if last_fid > 0 and fid - last_fid > 1:
+            print(f"!!!! sim_main: Frame id gap: {fid - last_fid}")
+        if last_fid < 0:
+            # init the force_lane_change_fid
+            force_lane_change_fid = fid
+        last_fid = fid
 
         my_controller.parse_vehicle_wheel()
-        steer = my_controller._control.steer  # range: -1.0 to 1.0
-        torque_strength = abs(steer)           # use magnitude only for now
-
+        #print(f"loop time: {time.time() - start:.2f}s")
 
         # Check reverse button (hold to go into reverse)
         reverse_pressed = my_controller._joystick.get_button(my_controller._reverse_idx)
 
         if reverse_pressed:
             my_controller._control.reverse = True
-            my_controller._control.gear = -1
         else:
             my_controller._control.reverse = False
-            my_controller._control.gear = 1
-
-        # Apply control to the vehicle
-        my_controller.vehicle.apply_control(my_controller._control)
 
         # Update the display
         display.blit(renderObject.surface, (0, 0))
+
+        # Display vehicle speed in both km/h and mph
+        speed_kmh = get_kmh_speed(vehicle)
+        speed_mph = get_mph_speed(vehicle)
+
+        # Display time elapsed in MM:SS format
+        time_elapsed = int(time.time() - start_time)
+        mins, secs = divmod(time_elapsed, 60)
+        time_str = f"{mins:02}:{secs:02}"
+
+        text_kmh = font.render(f"{speed_kmh:.1f} km/h", True, (255, 255, 255))
+        text_mph = font.render(f"{speed_mph:.1f} mph", True, (255, 255, 255))
+        text_time = font.render(f"Time Elapsed: {time_str}", True, (255, 255, 255))
+
+        display.blit(text_kmh, (20, 20))
+        display.blit(text_mph, (20, 60))
+        display.blit(text_time, (250, 20))
         pygame.display.flip()
+
+        if frame_count % 500 == 0:
+            gc.collect(0)
+            used_gb = psutil.Process().memory_info().rss / 1024 ** 3
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -475,17 +603,65 @@ try:
                 rmv_sensor.set_transform(right_mirror_transform)
 
 
+
             # TODO - Get vehicle telemetry and post to shared memory
             '''
             #v = vehicle.get_velocity()
             #Speed = (3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
             #print (Speed)
             '''
+            
+        loop_end = time.time()
+        loop_duration = loop_end - loop_start
+        tick_duration = tick_time - loop_start
+
+        print(f"Frame {fid} duration: {loop_duration*1000:.2f} ms")
+        
+        # Track frame timing
+        frame_times.append(loop_duration)
+        if len(frame_times) > max_frame_history:
+            frame_times.pop(0)
+        
+        # Timing sync block
+        this_tm = time.time()
+        if first_start_tm == 0:
+            if fid > 0 and renderObject.surface is not None:
+                first_start_tm = this_tm
+                first_fid = fid
+
+        if first_start_tm > 0:
+            expected_tm = first_start_tm + ((fid - first_fid) * settings.fixed_delta_seconds)
+            offset_ms = int((this_tm - expected_tm) * 1000)
+            
+            if fid % 10 == 0:
+                avg_frame_time = sum(frame_times) / len(frame_times) * 1000
+                print(f"Frame {fid}: loop={loop_duration*1000:.1f}ms, "
+                      f"tick={tick_duration*1000:.1f}ms, "
+                      f"avg={avg_frame_time:.1f}ms, offset={offset_ms}ms")
+                
+                # Warning if consistently slow
+                if avg_frame_time > (settings.fixed_delta_seconds * 1000 * 0.8):
+                    print(f"WARNING: Frame time approaching limit!")
+
+        # FRAME PACING - This is key to staying synchronized
+        sleep_time = clock.tick(10)
+
+        if sleep_time > 120:
+            print(f"WARNING: Frame {fid} took {sleep_time}ms (target: 100ms)")
+        if loop_duration > 0.12:  # 120ms
+            print(f"SPIKE Frame {fid}: total={loop_duration*1000:.1f}ms, "
+                f"tick={tick_duration*1000:.1f}ms, "
+                f"render={(loop_duration-tick_duration)*1000:.1f}ms")
+
+
+
 except (carla.TimeoutException, RuntimeError, Exception) as e:
     print(f"[Client Error] Lost connection to CARLA: {e}")
     crashed = True
 finally:
     print('Shutting Down')
+    shutdown_in_progress.set()
+    time.sleep(0.2)
     
     try:
         smd.shm.close()
