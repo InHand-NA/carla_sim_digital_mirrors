@@ -1,5 +1,5 @@
 # Ignore files
 poetry.lock
 __pycache__/
+*.pyc
 py38_venv/
-LICENSE
